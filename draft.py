@@ -56,7 +56,7 @@ class StatuteText:
         for line in self.raw_texts:
             level = self._get_section_level(line)
             node = {"text": line.strip(), "subsections": []}
-            
+
             label = re.match(r"^([\w\(\)]+\.?)\s+(.*)", node["text"])
             if label:
                 node["label"], node["text"] = label.groups()
@@ -283,3 +283,7 @@ for i, subsection in enumerate(subsections):
     print(f"Body: {statute.raw_text}")
 
     print("---------------------------------------------")
+
+
+# TODO: Looks like 385 is a mistake on the websites part (like a lot of others), we can't bank on those mistakes ever really working. 
+# So instead, it's probably best to just assume any non-pattern bullet is just a complete side-note and move it to the end at the root level. 
