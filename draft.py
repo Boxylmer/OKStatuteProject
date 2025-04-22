@@ -54,9 +54,9 @@ class StatuteData:
     @staticmethod
     def _parse_header_data(main_content_div: Tag) -> tuple[str, str]:
         # looks like inside a div called "document_header", theres a bunch of titles separated by <br> tags, but all in one <p>.
-        organization_soup = main_content_div.find("div", class_="document_header").find(
+        organization_soup = main_content_div.find("div", class_="document_header").find(  # type: ignore
             "p"
-        )  # type: ignore
+        )
 
         organization_list = []
         current_text = ""
@@ -94,45 +94,6 @@ class StatuteData:
 
         return (title, section)  # type: ignore
 
-
-    # @staticmethod
-    # def _parse_raw_body_data(main_content_div: Tag) -> list[str]:
-    #     # the body of all statutes, for some reason, have these comments in them
-    #     begin_comment = next(
-    #         (el for el in main_content_div.descendants if isinstance(el, Comment) and "BEGIN DOCUMENT" in el),
-    #         None,
-    #     )
-    #     end_comment = next(
-    #         (el for el in main_content_div.descendants if isinstance(el, Comment) and "END DOCUMENT" in el),
-    #         None,
-    #     )
-
-    #     if not begin_comment or not end_comment:
-    #         raise ValueError("BEGIN or END DOCUMENT comment not found")
-
-
-    #     body_elements = []
-    #     for el in begin_comment.next_siblings:
-    #         if el == end_comment:
-    #             break
-    #         if isinstance(el, Tag):
-    #             body_elements.append(el)
-
-    #     paragraph_bodies = []
-    #     for tag in body_elements:
-            
-    #         if tag.get_text().lower().strip() == "historical data":
-    #             break
-            
-    #         if tag.name == "p":
-    #             text = tag.get_text(" ", strip=True)
-    #             text = text.replace("\n", "").replace("\r", "").strip()
-    #             if text:
-    #                 paragraph_bodies.append(text)
-
-
-    #     return paragraph_bodies
-
     @staticmethod
     def _parse_raw_body_data(main_content_div: Tag) -> list[str]:
         document_header_div = main_content_div.find("div", class_="document_header")
@@ -142,33 +103,38 @@ class StatuteData:
         # Find the first <p> after the document header, regardless of nesting
         first_p = document_header_div.find_next("p")
         if not first_p:
-            raise ValueError("Could not find any <p> tag after <div class='document_header'>")
+            raise ValueError(
+                "Could not find any <p> tag after <div class='document_header'>"
+            )
 
         paragraph_bodies = []
 
         for el in first_p.find_all_next():
-            
-            el_text = el.get_text(" ", strip=True).replace("\n", "").replace("\r", "").strip().lower()
-            if el_text == "historical data":
+            el_text = (
+                el.get_text(" ", strip=True)
+                .replace("\n", "")
+                .replace("\r", "")
+                .replace("\xa0", "")
+                .strip()
+                .lower()
+            )
+            if el_text.startswith("historical data"):
                 break
 
             if isinstance(el, Tag) and el.name == "p":
-                cleaned_text = el.get_text(" ", strip=True).replace("\n", "").replace("\r", "").strip()
-                # if cleaned_text.lower() == "historical data":
-                #     break
+                cleaned_text = (
+                    el.get_text(" ", strip=True)
+                    .replace("\n", "")
+                    .replace("\r", "")
+                    .replace("\xa0", "")
+                    .strip()
+                )
 
                 if cleaned_text:
                     paragraph_bodies.append(cleaned_text)
 
-            
-
-            # # Only collect text from <p> tags
-            # if el.name == "p":
-            #     if el_text:
-            #         paragraph_bodies.append(el_text)
-
         return paragraph_bodies
-    
+
     @staticmethod
     def _parse_title_text(raw_text: str):
         match = re.match(r"Title\s+([0-9A-Z]+)\.\s*(.+)", raw_text)
@@ -189,31 +155,68 @@ class StatuteData:
         return StatuteData.from_html(html)
 
 
-def run_example(link: str): 
+def run_example(link: str):
     statute = StatuteData.from_oscn(link)
     return statute.raw_text
+
 
 subsections = get_statute_title_section_links(STATUTE_21_URL)
 
 # easy case, 301
-example_link = print(run_example("https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=69082"))
+example_link = print(
+    run_example(
+        "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=69082"
+    )
+)
 
 # 143 contains a nested list
-print(run_example("https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=496306"))
+print(
+    run_example(
+        "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=496306"
+    )
+)
 
 # 355 contains historical data at the end
-print(run_example("https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=69118"))
+print(
+    run_example(
+        "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=69118"
+    )
+)
 
 # 385 has a break where it should be a continuation
+print(
+    run_example(
+        "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=69138"
+    )
+)
 
 # 405 literally says "first, second, third, fourth"
+print(
+    run_example(
+        "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=69150"
+    )
+)
 
 # 465 contains weird \xa0 characters
+print(
+    run_example(
+        "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=487695"
+    )
+)
 
-# 484.1 contains sections that should eb cut off (Historical Data Laws 2009 instead of historical data)
+# 484.1 contains sections that should be cut off (Historical Data Laws 2009 instead of historical data)
+print(
+    run_example(
+        "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=455104"
+    )
+)
 
 # 498 / 499 contain numebrs in (1), (2), format
-
+print(
+    run_example(
+        "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=69195"
+    )
+)
 
 for i, subsection in enumerate(subsections):
     print(subsection["citation"])
