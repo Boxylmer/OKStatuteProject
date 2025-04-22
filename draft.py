@@ -1,9 +1,8 @@
 import re
+from collections import deque
 import requests  # type: ignore
 
-from typing import List, Optional
-
-from bs4 import BeautifulSoup, Tag, NavigableString, Comment
+from bs4 import BeautifulSoup, Tag, NavigableString
 
 BASE_URL = "https://www.oscn.net/"
 STATUTE_21_URL = "https://www.oscn.net/applications/oscn/index.asp?ftdb=STOKST21"
@@ -30,6 +29,57 @@ def get_statute_title_section_links(statute_title_url, ignore_repealed=True):
         statute_links.append({"citation": text, "link": full_url})
     return statute_links
 
+
+class StatuteText:
+    SECTION_PATTERNS = [
+        (r"^[A-Z]\.", 1),        # A., B., C.
+        (r"^\d+\.", 2),          # 1., 2., 3.
+        (r"^[a-z]\.", 3),        # a., b., c.
+        (r"^\([A-Z]\)", 4),      # (A), (B) (rare, maybe used once)
+        (r"^\([0-9]+\)", 5),     # (1), (2) (rare, used like once)
+        (r"^(First|Second|Third|Fourth|Fifth|Sixth|Seventh|Eighth|Ninth|Tenth)\.", 6),  # Ordinal
+    ]
+
+    def __init__(self, raw_texts: list[str]):
+        self.raw_texts = raw_texts
+
+    def _get_section_level(self, text: str) -> int:
+        for pattern, level in self.SECTION_PATTERNS:
+            if re.match(pattern, text.strip()):
+                return level
+        raise(ValueError(f"Pattern not seen before for raw text: '{text.strip()}'"))
+
+    def _parse(self) -> list[dict]:
+        root = []
+        stack = deque()
+
+        for line in self.raw_texts:
+            level = self._get_section_level(line)
+            node = {"text": line.strip(), "subsections": []}
+            
+            label = re.match(r"^([\w\(\)]+\.?)\s+(.*)", node["text"])
+            if label:
+                node["label"], node["text"] = label.groups()
+            else:
+                node["label"] = None # type: ignore
+
+            while stack and stack[-1][1] >= level:
+                stack.pop()
+
+            if stack:
+                stack[-1][0]["subsections"].append(node)
+            else:
+                root.append(node)
+
+            stack.append((node, level))
+
+        return root
+
+    def structure(self) -> dict:
+        return {"data": self._parse()}
+
+test_texts = ['A. There is hereby created the Sexual Assault Forensic Evidence (SAFE) Board within the Office of the Attorney General. The Board shall have the power and duty to:', '1. Examine the process for gathering and analyzing sexual assault forensic evidence kits in this state and work with members of the Legislature to draft proposed legislation to improve the response of medical and law enforcement systems to sexual assault;', '2. Develop a plan for the prioritization and acceptance of untested sexual assault forensic evidence kits identified in the statewide audit conducted by the Board;', '3. Identify possible procedures for the testing of anonymous sexual assault evidence kits;', '4. Identify possible improvements for victim access to evidence other than sexual assault forensic evidence kits including, but not limited to, police reports and other physical evidence;', '5. Identify additional rights of victims concerning the sexual assault forensic evidence kits testing process;', '6. Identify and pursue grants and other funding sources to address untested sexual assault forensic evidence kits, reduce testing wait times, provide victim notification, and improve efficiencies in the kit testing process; and', '7. Develop a comprehensive training plan for equipping and enhancing the work of law enforcement, prosecutors, victim advocates, Sexual Assault Nurse Examiners, and multidisciplinary Sexual Assault Response Teams (SARTs) across all jurisdictions within this state.', 'B. In carrying out its duties and responsibilities, the Board shall:', '1. Promulgate rules establishing criteria for the collection of sexual assault forensic evidence subject to specific, in-depth review by the Board;', '2. Establish and maintain statistical information related to sexual assault forensic evidence collection including, but not limited to, demographic and medical diagnostic information;', '3. Establish procedures for obtaining initial information regarding the collection of sexual assault forensic evidence from medical and law enforcement entities;', '4. Review the policies, practices, and procedures of the medical and law enforcement systems and make specific recommendations to the entities comprising the medical and law enforcement systems for actions necessary to improve such systems;', '5. Review the extent to which the medical and law enforcement systems are coordinated and evaluate whether the state is efficiently discharging its sexual assault forensic evidence collection responsibilities;', '6. Request and obtain a copy of all records and reports pertaining to sexual assault forensic evidence including, but not limited to:', 'a. hospital records,', 'b. court records,', 'c. local, state, and federal law enforcement records,', 'd. medical and dental records, and', 'e. emergency medical service records.', 'Confidential information provided to the Board shall be maintained by the Board in a confidential manner as otherwise required by state and federal law. Any person damaged by disclosure of such confidential information by the Board or its members which is not authorized by law may maintain an action for damages, costs, and attorney fees pursuant to The Governmental Tort Claims Act;', '7. Maintain all confidential information, documents, and records in possession of the Board as confidential and not subject to subpoena or discovery in any civil or criminal proceedings; provided, however, such information, documents, and records otherwise available from other sources shall not be exempt from subpoena or discovery through such sources solely because such information, documents, and records were presented to or reviewed by the Board; and', '8. Exercise all incidental powers necessary and proper for the implementation and administration of the Sexual Assault Forensic Evidence (SAFE) Board.', 'C. The review and discussion of individual cases of sexual assault evidence collection shall be conducted in executive session. All discussions of individual cases and any writings produced by or created for the Board in the course of determining a remedial measure to be recommended by the Board, as the result of a review of an individual case of sexual assault evidence collection, shall be privileged and shall not be admissible in evidence in any proceeding. All other business shall be conducted in accordance with the provisions of the Oklahoma Open Meeting Act. The Board shall periodically conduct meetings to discuss organization and business matters and any actions or recommendations aimed at improvement of the collection of sexual assault forensic evidence which shall be subject to the Oklahoma Open Meeting Act.', 'D. The Board shall submit an annual statistical report on the incidence of sexual assault forensic evidence collection in this state for which the Board has completed its review during the past calendar year including its recommendations, if any, to medical and law enforcement systems. The Board shall also prepare and make available to the public an annual report containing a summary of the activities of the Board relating to the review of sexual assault forensic evidence collection and an evaluation of whether the state is efficiently discharging its sexual assault forensic evidence collection responsibilities. The report shall be completed no later than February 1 of the subsequent year.']
+StatuteText(test_texts).structure()
 
 class StatuteData:
     def __init__(self, title, section, raw_text):
@@ -153,6 +203,12 @@ class StatuteData:
     def from_oscn(link: str) -> "StatuteData":
         html = requests.get(link).text
         return StatuteData.from_html(html)
+
+    @staticmethod
+    def structure_text(raw_text: list[str]):
+        ...
+
+
 
 
 def run_example(link: str):
