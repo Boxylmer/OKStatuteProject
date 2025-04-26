@@ -167,7 +167,7 @@ class StatuteText:
         return "\n\n".join(rendered) if pretty else " ".join(rendered)
 
 
-class Statute:
+class StatuteParser:
 
     def __init__(self, title: str, section: str, raw_texts: list[str]):
         self.title = title
@@ -176,18 +176,18 @@ class Statute:
         self.formatted_data = StatuteText(raw_texts)
 
     @staticmethod
-    def from_html(html) -> "Statute":
+    def from_html(html) -> "StatuteParser":
         soup = BeautifulSoup(html, "html.parser")
         main_content_div = soup.find(
             "div", id="oscn-content"
         )  # right now, everything I want is inside this div
         if not isinstance(main_content_div, Tag):
             raise (ValueError("oscn-content was not found in the html"))
-        title, section = Statute._parse_header_data(main_content_div)
+        title, section = StatuteParser._parse_header_data(main_content_div)
 
-        raw_texts = Statute._parse_raw_body_data(main_content_div)
+        raw_texts = StatuteParser._parse_raw_body_data(main_content_div)
 
-        return Statute(title, section, raw_texts=raw_texts)
+        return StatuteParser(title, section, raw_texts=raw_texts)
 
     @staticmethod
     def _parse_header_data(main_content_div: Tag) -> tuple[str, str]:
@@ -288,13 +288,12 @@ class Statute:
         return title_number, title_text
 
     @staticmethod
-    def from_oscn(link: str) -> "Statute":
+    def from_oscn(link: str) -> "StatuteParser":
         html = requests.get(link).text
-        return Statute.from_html(html)
+        return StatuteParser.from_html(html)
 
     def formatted_text(self, **kwargs) -> str:
         return self.formatted_data.get_text( **kwargs)
-
 
 
 class StatuteCache:
@@ -312,6 +311,9 @@ class StatuteCache:
         ...
         # if the cache folder doesn't exist, create it
     
-    def cache_statute(self, statute_link: str) -> Statute:
+    def cache_statute(self, statute_link: str) -> StatuteParser:
         ...
         # grab, cache the statute, return the parsed Statute
+
+    def available_statutes(self): list[str]
+        # read and list 
