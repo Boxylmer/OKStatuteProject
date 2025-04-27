@@ -36,7 +36,7 @@ class StatuteParser:
         self.title = title
         self.section = section
         self.raw_text = raw_texts
-        self.formatted_data = StatuteText(raw_texts)
+        self.statute_text = StatuteText(raw_texts)
 
     @staticmethod
     def from_html(html) -> "StatuteParser":
@@ -156,4 +156,16 @@ class StatuteParser:
         return StatuteParser.from_html(html)
 
     def formatted_text(self, **kwargs) -> str:
-        return self.formatted_data.as_text(**kwargs)
+        return self.statute_text.as_text(**kwargs)
+
+    # StatuteText wrappers
+    def text_json(self):
+        return self.statute_text.as_json()
+
+    def text(self, subsection: str = "", pretty: bool = False, indent: int = 2):
+        return self.statute_text.as_text(
+            subsection=subsection, pretty=pretty, indent=indent
+        )
+
+    def subsection_names(self):
+        return self.statute_text.subsection_names()

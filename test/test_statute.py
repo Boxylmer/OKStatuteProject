@@ -46,8 +46,12 @@ class TestStatuteText(unittest.TestCase):
         new_st = StatuteText.from_json(statute_json)
         self.assertEqual(str(new_st.as_list()), str(st.as_list()))
 
-        self.assertTrue(statute_text.endswith("subsequent year.")) # checks if part D actually made it to the end
-        self.assertTrue(statute_list[-1]['text'].endswith("February 1 of the subsequent year.")) # checks the same as above, but for the list getter
+        self.assertTrue(
+            statute_text.endswith("subsequent year.")
+        )  # checks if part D actually made it to the end
+        self.assertTrue(
+            statute_list[-1]["text"].endswith("February 1 of the subsequent year.")
+        )  # checks the same as above, but for the list getter
 
     def test_statute_text_getters(self):
         st = StatuteText(self.TEST_TEXT_1)
@@ -112,99 +116,75 @@ class TestStatuteText(unittest.TestCase):
         self.assertEqual(st._get_subsection("foo"), {})
 
 
-# st.get_text("")
+class TestStatuteParser(unittest.TestCase):
+    # easy case, 301
+    EASY_TL21_ST301 = (
+        "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=69082"
+    )
 
-# test_text_first_second_etc = [
-#     "Appeals may be allowed as in civil cases, but the possession of monies, funds, properties or assets being so unlawfully used shall be prima facie evidence that it is the properties, funds, monies or assets of the person so using it. Where said monies, funds, properties or assets are sold or otherwise ordered forfeited under the provisions of this act the proceeds shall be disbursed and applied as follows:",
-#     "First. To the payment of the costs of the forfeiting proceedings and actual expenses of preserving the properties.",
-#     "Second. One-eighth (1/8) of the proceeds remaining to the public official, witness, juror or other person to whom the bribe was given, provided such public official, witness, juror or other person had theretofore voluntarily surrendered the same to the sheriff of the county and informed the proper officials of the bribery or attempted bribery.",
-#     "Third. One-eighth (1/8) to the district attorney prosecuting the case.",
-#     "Fourth. The balance to the county treasurer to be credited by him to the court fund of the county.",
-# ]
-# st = StatuteText(test_text_first_second_etc)
-# st.subsections()
-# st.get_text()
-# st.as_dict()
-# st.as_json()
-# st.get_text(st.subsections()[1])
+    # 143 contains a nested list
+    NESTED_TL_ST143 = (
+        "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=496306"
+    )
 
+    # 355 contains historical data at the end
+    HISTORICAL_TL21_ST355 = (
+        "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=69118"
+    )
 
-# # StatuteData
+    # 385 has a break where it should be a continuation
+    HISTORICAL_TL21_ST385 = (
+        "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=69138"
+    )
 
+    # 405 literally says "first, second, third, fourth"
+    LITERAL_TL21_ST_405 = (
+        "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=69150"
+    )
 
-# def run_example(link: str):
-#     statute = StatuteData.from_oscn(link)
-#     return statute.raw_text
+    # 465 contains weird \xa0 characters
+    WEIRD_CHARACTERS_TL21_ST465 = (
+        "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=487695"
+    )
 
+    # 484.1 contains sections that should be cut off (Historical Data Laws 2009 instead of historical data)
+    CONTAINS_HIST_TL21_ST401 = (
+        "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=455104"
+    )
 
-# subsections = get_statute_title_section_links(STATUTE_21_URL)
+    # 498 / 499 contain numebrs in (1), (2), format
+    UNUSUAL_NUMBERING_TL21_ST499 = (
+        "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=69195"
+    )
 
-# # easy case, 301
-# example_link = print(
-#     run_example(
-#         "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=69082"
-#     )
-# )
+    def test_from_oscn(self):
+        st = StatuteParser.from_oscn(self.EASY_TL21_ST301)
+        self.assertEqual(st.title, "Title 21. Crimes and Punishments")
+        self.assertEqual(
+            st.section, "Section 301 - Prevention of Legislative Meetings - Penalty"
+        )
 
-# # 143 contains a nested list
-# print(
-#     run_example(
-#         "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=496306"
-#     )
-# )
+    def test_special_cases(self):
+        st = StatuteParser.from_oscn(self.EASY_TL21_ST301)
+        self.assertEqual(st.subsection_names(), [])
 
-# # 355 contains historical data at the end
-# print(
-#     run_example(
-#         "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=69118"
-#     )
-# )
+        st = StatuteParser.from_oscn(self.NESTED_TL_ST143)
+        self.assertEqual(st.subsection_names()[2], "A.2")
 
-# # 385 has a break where it should be a continuation
-# print(
-#     run_example(
-#         "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=69138"
-#     )
-# )
+        st = StatuteParser.from_oscn(self.HISTORICAL_TL21_ST355)
+        self.assertEqual(st.subsection_names(), ['A', 'B', 'C'])
 
-# # 405 literally says "first, second, third, fourth"
-# print(
-#     run_example(
-#         "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=69150"
-#     )
-# )
+        st = StatuteParser.from_oscn(self.HISTORICAL_TL21_ST385)
+        self.assertEqual(st.subsection_names(), ['1', '2'])
 
-# # 465 contains weird \xa0 characters
-# print(
-#     run_example(
-#         "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=487695"
-#     )
-# )
+        st = StatuteParser.from_oscn(self.LITERAL_TL21_ST_405)
+        self.assertEqual(st.subsection_names(), ['First', 'Second', 'Third', 'Fourth'])
 
-# # 484.1 contains sections that should be cut off (Historical Data Laws 2009 instead of historical data)
-# print(
-#     run_example(
-#         "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=455104"
-#     )
-# )
+        st = StatuteParser.from_oscn(self.WEIRD_CHARACTERS_TL21_ST465)
+        self.assertNotIn("\xa0", st.text())
 
-# # 498 / 499 contain numebrs in (1), (2), format
-# print(
-#     run_example(
-#         "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=69195"
-#     )
-# )
+        st = StatuteParser.from_oscn(self.CONTAINS_HIST_TL21_ST401)
+        self.assertNotIn("Historical Data", st.text())
 
-# for i, subsection in enumerate(subsections):
-#     print(subsection["citation"])
-#     html = requests.get(subsection["link"]).text
-#     statute = StatuteData.from_html(html)
-#     print(f"Title: {statute.title}")
-#     print(f"Section: {statute.section}")
-#     print(f"Body: {statute.formatted_text()}")
-
-#     print("---------------------------------------------")
-
-
-# # TODO: Looks like 385 is a mistake on the websites part (like a lot of others), we can't bank on those mistakes ever really working.
-# # So instead, it's probably best to just assume any non-pattern bullet is just a complete side-note and move it to the end at the root level.
+        st = StatuteParser.from_oscn(self.UNUSUAL_NUMBERING_TL21_ST499)
+        self.assertEqual(st.subsection_names(), ['a', 'b', 'c'])

@@ -11,6 +11,7 @@ class StatuteText:
         (r"^[a-z]\.", 3),  # a., b., c.
         (r"^\([A-Z]\)", 4),  # (A), (B)
         (r"^\([0-9]+\)", 5),  # (1), (2)
+        (r"^\([a-z]\)", 7),  # (a), (b), (c)
         (
             r"^(First|Second|Third|Fourth|Fifth|Sixth|Seventh|Eighth|Ninth|Tenth)\.",
             6,
@@ -35,7 +36,6 @@ class StatuteText:
     def _parse(self, raw_texts) -> list[dict]:
         root = []
         stack: deque[tuple[Any, int]] = deque()
-        seen_structure = False
 
         for line in raw_texts:
             line = line.strip()
@@ -68,49 +68,6 @@ class StatuteText:
             stack.append((node, level))
 
         return root
-
-
-    # def _parse(self, raw_texts) -> list[dict]:
-    #     root = []
-    #     stack: deque[tuple[Any, int]] = deque()
-    #     orphans = []
-    #     seen_structure = False
-
-    #     for line in raw_texts:
-    #         line = line.strip()
-    #         level = self._get_section_level(line)
-
-    #         if level == 0:
-    #             if seen_structure:
-    #                 orphans.append({"label": None, "text": line, "subsections": []})
-    #                 continue
-    #             else:
-    #                 root.append({"label": None, "text": line, "subsections": []})
-    #                 continue
-
-    #         seen_structure = True
-    #         node = {"text": line, "subsections": []}
-    #         label_match = re.match(r"^([\w\(\)\.]+)\s+(.*)", line)
-
-    #         if label_match:
-    #             raw_label, content = label_match.groups()
-    #             node["label"] = self._clean_label(raw_label)
-    #             node["text"] = content
-    #         else:
-    #             node["label"] = None
-
-    #         while stack and stack[-1][1] >= level:
-    #             stack.pop()
-
-    #         if stack:
-    #             stack[-1][0]["subsections"].append(node)
-    #         else:
-    #             root.append(node)
-
-    #         stack.append((node, level))
-
-    #     root.extend(orphans)
-    #     return root
 
     def as_list(self) -> list[dict]:
         return self.structured_data
