@@ -32,9 +32,9 @@ def get_statute_title_section_links(statute_title_url, ignore_repealed=True):
 
 
 class StatuteParser:
-    def __init__(self, title: str, section: str, raw_texts: list[str]):
-        self.title = title
-        self.section = section
+    def __init__(self, full_title: str, full_section: str, raw_texts: list[str]):
+        self.full_title = full_title
+        self.full_section = full_section
         self.raw_text = raw_texts
         self.statute_text = StatuteText(raw_texts)
 
@@ -169,3 +169,9 @@ class StatuteParser:
 
     def subsection_names(self):
         return self.statute_text.subsection_names()
+
+    def title(self):
+        pass
+
+    def section(self):
+        pass

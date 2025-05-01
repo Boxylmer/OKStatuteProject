@@ -159,9 +159,10 @@ class TestStatuteParser(unittest.TestCase):
 
     def test_from_oscn(self):
         st = StatuteParser.from_oscn(self.EASY_TL21_ST301)
-        self.assertEqual(st.title, "Title 21. Crimes and Punishments")
+        self.assertEqual(st.full_title, "Title 21. Crimes and Punishments")
         self.assertEqual(
-            st.section, "Section 301 - Prevention of Legislative Meetings - Penalty"
+            st.full_section,
+            "Section 301 - Prevention of Legislative Meetings - Penalty",
         )
 
     def test_special_cases(self):
@@ -172,13 +173,13 @@ class TestStatuteParser(unittest.TestCase):
         self.assertEqual(st.subsection_names()[2], "A.2")
 
         st = StatuteParser.from_oscn(self.HISTORICAL_TL21_ST355)
-        self.assertEqual(st.subsection_names(), ['A', 'B', 'C'])
+        self.assertEqual(st.subsection_names(), ["A", "B", "C"])
 
         st = StatuteParser.from_oscn(self.HISTORICAL_TL21_ST385)
-        self.assertEqual(st.subsection_names(), ['1', '2'])
+        self.assertEqual(st.subsection_names(), ["1", "2"])
 
         st = StatuteParser.from_oscn(self.LITERAL_TL21_ST_405)
-        self.assertEqual(st.subsection_names(), ['First', 'Second', 'Third', 'Fourth'])
+        self.assertEqual(st.subsection_names(), ["First", "Second", "Third", "Fourth"])
 
         st = StatuteParser.from_oscn(self.WEIRD_CHARACTERS_TL21_ST465)
         self.assertNotIn("\xa0", st.text())
@@ -187,4 +188,7 @@ class TestStatuteParser(unittest.TestCase):
         self.assertNotIn("Historical Data", st.text())
 
         st = StatuteParser.from_oscn(self.UNUSUAL_NUMBERING_TL21_ST499)
-        self.assertEqual(st.subsection_names(), ['a', 'b', 'c'])
+        self.assertEqual(st.subsection_names(), ["a", "b", "c"])
+
+        print(st.full_title)
+        print(st.full_section)
