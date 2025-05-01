@@ -168,6 +168,10 @@ class TestStatuteParser(unittest.TestCase):
     def test_special_cases(self):
         st = StatuteParser.from_oscn(self.EASY_TL21_ST301)
         self.assertEqual(st.subsection_names(), [])
+        self.assertEqual(st.parse_title()[0], "21")
+        self.assertEqual(st.parse_title()[1], "Crimes and Punishments")
+        self.assertEqual(st.parse_section()[0], "301")
+        self.assertEqual(st.parse_section()[1], "Prevention of Legislative Meetings - Penalty")
 
         st = StatuteParser.from_oscn(self.NESTED_TL_ST143)
         self.assertEqual(st.subsection_names()[2], "A.2")
@@ -189,6 +193,3 @@ class TestStatuteParser(unittest.TestCase):
 
         st = StatuteParser.from_oscn(self.UNUSUAL_NUMBERING_TL21_ST499)
         self.assertEqual(st.subsection_names(), ["a", "b", "c"])
-
-        print(st.full_title)
-        print(st.full_section)

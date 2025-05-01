@@ -1,7 +1,9 @@
 import os
 import json
 from datetime import datetime
+from pathlib import Path
 from statute.statuteparser import StatuteParser
+from typing import Any
 
 
 class StatuteCache:
@@ -9,18 +11,18 @@ class StatuteCache:
         self.cache_folder = cache_folder
         os.makedirs(cache_folder, exist_ok=True)
 
-    def _cache_path(self, title_section: str) -> str:
-        return os.path.join(self.cache_folder, f"{title_section}.json")
+    def _cache_path(self, title_section: str) -> Path:
+        return Path(os.path.join(self.cache_folder, f"{title_section}.json"))
 
     def cache_statute(self, statute_link: str) -> StatuteParser:
         # Download and parse the statute directly from the link
         parser = StatuteParser.from_oscn(statute_link)
 
-        data = {
+        data: dict[str, Any] = {
             "link": statute_link,
-            "title_section": f"{parser.full_title}.{parser.full_section}",
+            "title_section": f"{parser.parse_section()[0]}.{parser.parse_title()[0]}",
             "cached_at": datetime.now().strftime("%Y%m%d"),
-            "html": parser.formatted_text(),  # or raw html if you change this later
+            "raw_texts": parser.raw_text,  # or raw html if you change this later
         }
 
         with open(self._cache_path(data["title_section"]), "w", encoding="utf-8") as f:

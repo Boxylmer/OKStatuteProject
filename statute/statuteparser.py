@@ -170,8 +170,22 @@ class StatuteParser:
     def subsection_names(self):
         return self.statute_text.subsection_names()
 
-    def title(self):
-        pass
+    def parse_title(self) -> tuple[str, str]:
+        """
+        Extracts the title number and title label from a line like:
+        'Title 124A. Crimes and Punishments'
+        """
+        match = re.match(r"Title\s+([0-9A-Za-z]+)\.\s*(.+)", self.full_title)
+        if not match:
+            raise ValueError(f"Unrecognized title format: {self.full_title}")
+        return match.group(1), match.group(2)
 
-    def section(self):
-        pass
+    def parse_section(self) -> tuple[str, str]:
+        """
+        Extracts the section number and label from a line like:
+        'Section 301 - Prevention of Legislative Meetings - Penalty'
+        """
+        match = re.match(r"Section\s+([0-9A-Za-z]+)\s*-\s*(.+)", self.full_section)
+        if not match:
+            raise ValueError(f"Unrecognized section format: {self.full_section}")
+        return match.group(1), match.group(2)
