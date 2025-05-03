@@ -1,6 +1,6 @@
 import os
 import json
-from datetime import datetime, date
+from datetime import datetime
 from pathlib import Path
 from statute.statuteparser import StatuteParser
 from typing import Any

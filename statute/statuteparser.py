@@ -6,7 +6,6 @@ from bs4 import BeautifulSoup, Tag, NavigableString
 from statute.statutetext import StatuteText
 
 BASE_URL = "https://www.oscn.net/"
-STATUTE_21_URL = "https://www.oscn.net/applications/oscn/index.asp?ftdb=STOKST21"
 
 
 class StatuteParser:
@@ -167,10 +166,10 @@ class StatuteParser:
         if not match:
             raise ValueError(f"Unrecognized section format: {self.full_section}")
         return match.group(1), match.group(2)
-    
+
     def parse_citation(self) -> str:
         return f"{self.parse_title()[0]}.{self.parse_section()[0]}"
-    
+
     @staticmethod
     def get_statute_links(statute_title_url, ignore_repealed=True):
         response = requests.get(statute_title_url)
@@ -192,4 +191,3 @@ class StatuteParser:
             full_url = BASE_URL + "/applications/oscn/" + href
             statute_links.append({"citation": text, "link": full_url})
         return statute_links
-
