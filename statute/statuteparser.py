@@ -185,7 +185,7 @@ class StatuteParser:
         Extracts the section number and label from a line like:
         'Section 301 - Prevention of Legislative Meetings - Penalty'
         """
-        match = re.match(r"Section\s+([0-9A-Za-z.]+)\s*-\s*(.+)", self.full_section)
+        match = re.match(r"Section\s+([0-9A-Za-z.-]+)\s*-\s*(.+)", self.full_section)
         if not match:
             raise ValueError(f"Unrecognized section format: {self.full_section}")
         return match.group(1), match.group(2)

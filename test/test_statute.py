@@ -163,6 +163,16 @@ class TestStatuteParser(unittest.TestCase):
         "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=69195"
     )
 
+    # statute with 2-101 as the section
+    DASHED_NAME_TL29_ST2_101 = (
+        "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=77641"
+    )
+
+    # statute with 1-1-203 as the section and 27A as the title.
+    WEIRD_TITLE_AND_SECTION_TL27A_ST_1_1_203 = (
+        "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=78939"
+    )
+
     def test_from_oscn(self):
         st = StatuteParser.from_oscn(self.EASY_TL21_ST301)
         self.assertEqual(st.full_title, "Title 21. Crimes and Punishments")
@@ -202,6 +212,15 @@ class TestStatuteParser(unittest.TestCase):
 
         st = StatuteParser.from_oscn(self.UNUSUAL_NUMBERING_TL21_ST499)
         self.assertEqual(st.subsection_names(), ["a", "b", "c"])
+
+        st = StatuteParser.from_oscn(self.DASHED_NAME_TL29_ST2_101)
+        self.assertEqual(st.parse_section()[0], "2-101")
+
+        st = StatuteParser.from_oscn(self.WEIRD_TITLE_AND_SECTION_TL27A_ST_1_1_203)
+        self.assertEqual(st.parse_title()[0], "27A")
+        self.assertEqual(st.parse_section()[0], "1-1-203")
+        self.assertEqual(st.parse_citation(), "27A.1-1-203")
+        
 
 
 class TestStatuteCache(unittest.TestCase):
@@ -253,7 +272,9 @@ class TestStatuteCache(unittest.TestCase):
         path = os.path.join(self.test_dir, f"{citation_str}.json")
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        data["cached_at"] = (datetime.now() - timedelta(days=10)).isoformat(timespec="seconds")
+        data["cached_at"] = (datetime.now() - timedelta(days=10)).isoformat(
+            timespec="seconds"
+        )
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f)
         ##################################################
