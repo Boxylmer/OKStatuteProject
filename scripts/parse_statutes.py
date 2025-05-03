@@ -9,3 +9,12 @@ title_21_links = [st["link"] for st in StatuteParser.get_statute_links(STATUTE_2
 for link in title_21_links:
     parser = cache.get_statute(link)
     print("Cached:", parser.parse_citation())
+
+
+
+cache.available_statutes()
+
+st1 = cache.get_statute_by_citation(cache.available_statutes()[5])
+st1.formatted_text()
+st1.subsection_names()
+
