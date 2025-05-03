@@ -9,28 +9,6 @@ BASE_URL = "https://www.oscn.net/"
 STATUTE_21_URL = "https://www.oscn.net/applications/oscn/index.asp?ftdb=STOKST21"
 
 
-def get_statute_title_section_links(statute_title_url, ignore_repealed=True):
-    response = requests.get(statute_title_url)
-    soup = BeautifulSoup(response.text, "html.parser")
-    statute_links = []
-
-    for link in soup.find_all("a", href=True):
-        text = link.get_text(strip=True)
-        href = link["href"]
-
-        if ignore_repealed and text.strip().lower().endswith("repealed"):
-            continue
-
-        if (
-            "DeliverDocument.asp?CiteID=" not in href
-        ):  # i.e., is the link actually to a statute?
-            continue
-
-        full_url = BASE_URL + "/applications/oscn/" + href
-        statute_links.append({"citation": text, "link": full_url})
-    return statute_links
-
-
 class StatuteParser:
     def __init__(self, full_title: str, full_section: str, raw_texts: list[str]):
         self.full_title = full_title
@@ -192,3 +170,26 @@ class StatuteParser:
     
     def parse_citation(self) -> str:
         return f"{self.parse_title()[0]}.{self.parse_section()[0]}"
+    
+    @staticmethod
+    def get_statute_links(statute_title_url, ignore_repealed=True):
+        response = requests.get(statute_title_url)
+        soup = BeautifulSoup(response.text, "html.parser")
+        statute_links = []
+
+        for link in soup.find_all("a", href=True):
+            text = link.get_text(strip=True)
+            href = link["href"]
+
+            if ignore_repealed and text.strip().lower().endswith("repealed"):
+                continue
+
+            if (
+                "DeliverDocument.asp?CiteID=" not in href
+            ):  # i.e., is the link actually to a statute?
+                continue
+
+            full_url = BASE_URL + "/applications/oscn/" + href
+            statute_links.append({"citation": text, "link": full_url})
+        return statute_links
+

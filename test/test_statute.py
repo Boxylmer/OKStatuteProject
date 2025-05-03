@@ -8,7 +8,7 @@ import unittest
 
 # statutetext
 from statute.statutetext import StatuteText
-from statute.statuteparser import StatuteParser
+from statute.statuteparser import StatuteParser, STATUTE_21_URL
 from statute.statutecache import StatuteCache
 
 
@@ -221,7 +221,13 @@ class TestStatuteParser(unittest.TestCase):
         self.assertEqual(st.parse_section()[0], "1-1-203")
         self.assertEqual(st.parse_citation(), "27A.1-1-203")
         
-
+    def test_link_retrieval(self):
+        links = StatuteParser.get_statute_links(STATUTE_21_URL)
+        links_with_repealed =  StatuteParser.get_statute_links(STATUTE_21_URL, ignore_repealed=False)
+        print(links)
+        self.assertGreater(len(links), 2)
+        self.assertGreater(len(links_with_repealed), len(links))
+        
 
 class TestStatuteCache(unittest.TestCase):
     # 484.1 contains sections that should be cut off (Historical Data Laws 2009 instead of historical data)
