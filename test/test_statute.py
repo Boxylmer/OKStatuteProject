@@ -8,8 +8,10 @@ import unittest
 
 # statutetext
 from statute.statutetext import StatuteText
-from statute.statuteparser import StatuteParser, STATUTE_21_URL
+from statute.statuteparser import StatuteParser
 from statute.statutecache import StatuteCache
+
+STATUTE_21_URL = "https://www.oscn.net/applications/oscn/index.asp?ftdb=STOKST21"
 
 
 class TestStatuteText(unittest.TestCase):
@@ -224,7 +226,6 @@ class TestStatuteParser(unittest.TestCase):
     def test_link_retrieval(self):
         links = StatuteParser.get_statute_links(STATUTE_21_URL)
         links_with_repealed =  StatuteParser.get_statute_links(STATUTE_21_URL, ignore_repealed=False)
-        print(links)
         self.assertGreater(len(links), 2)
         self.assertGreater(len(links_with_repealed), len(links))
         
@@ -283,9 +284,24 @@ class TestStatuteCache(unittest.TestCase):
         )
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f)
+        self.cache.cache_dates[citation_str] = data["cached_at"]
         ##################################################
 
         self.cache._load_cached_metadata()
         removed = self.cache.prune_cache(datetime.now() - timedelta(days=1))
         self.assertEqual(removed, 1)
         self.assertNotIn(citation_str, self.cache.available_statutes())
+        self.assertNotIn(citation_str, self.cache.citations)
+        self.assertNotIn(citation_str, self.cache.cache_dates)
+        self.assertNotIn(self.CONTAINS_HIST_TL21_ST401, self.cache.cached_links)
+
+    def test_registry_updates_on_add(self):
+        parser = self.cache.get_statute(self.CONTAINS_HIST_TL21_ST401)
+        citation = parser.parse_citation()
+
+        # Check citation added to internal registry
+        self.assertIn(citation, self.cache.citations)
+        self.assertIn(citation, self.cache.cache_dates)
+        self.assertIn(self.CONTAINS_HIST_TL21_ST401, self.cache.cached_links)
+        self.assertEqual(self.cache.cached_links[self.CONTAINS_HIST_TL21_ST401], citation)
+
