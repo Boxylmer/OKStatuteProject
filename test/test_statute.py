@@ -177,7 +177,9 @@ class TestStatuteParser(unittest.TestCase):
         self.assertEqual(st.parse_title()[0], "21")
         self.assertEqual(st.parse_title()[1], "Crimes and Punishments")
         self.assertEqual(st.parse_section()[0], "301")
-        self.assertEqual(st.parse_section()[1], "Prevention of Legislative Meetings - Penalty")
+        self.assertEqual(
+            st.parse_section()[1], "Prevention of Legislative Meetings - Penalty"
+        )
 
         st = StatuteParser.from_oscn(self.NESTED_TL_ST143)
         self.assertEqual(st.subsection_names()[2], "A.2")
@@ -204,32 +206,36 @@ class TestStatuteParser(unittest.TestCase):
 
 class TestStatuteCache(unittest.TestCase):
     # 484.1 contains sections that should be cut off (Historical Data Laws 2009 instead of historical data)
-    CONTAINS_HIST_TL21_ST401 = "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=455104"
-    
+    CONTAINS_HIST_TL21_ST401 = (
+        "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=455104"
+    )
+
     # 498 / 499 contain numbers in (1), (2), format
-    UNUSUAL_NUMBERING_TL21_ST499 = "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=69195"
+    UNUSUAL_NUMBERING_TL21_ST499 = (
+        "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=69195"
+    )
 
     def setUp(self):
         self.test_dir = Path("test/cache_dir")
         self.cache = StatuteCache(self.test_dir)
 
-    # def tearDown(self):
-    #     shutil.rmtree(self.test_dir)
+    def tearDown(self):
+        shutil.rmtree(self.test_dir)
 
     def test_cache_statute(self):
         parser = self.cache.get_statute(self.CONTAINS_HIST_TL21_ST401)
-        title_section = f"{parser.parse_title()[0]}.{parser.parse_section()[0]}"
+        title_section = parser.parse_citation()
 
         path = os.path.join(self.test_dir, f"{title_section}.json")
         self.assertTrue(os.path.exists(path))
 
-        self.assertIn(title_section, self.cache.available_statutes()) # metadata check
+        self.assertIn(title_section, self.cache.available_statutes())  # metadata check
 
     def test_get_statute_by_title_section(self):
         parser1 = self.cache.get_statute(self.CONTAINS_HIST_TL21_ST401)
         title_section = f"{parser1.parse_title()[0]}.{parser1.parse_section()[0]}"
 
-        parser2 = self.cache.get_statute_by_title_section(title_section)
+        parser2 = self.cache.get_statute_by_citation(title_section)
         self.assertEqual(parser1.raw_text, parser2.raw_text)
 
     def test_force_refresh(self):
@@ -241,19 +247,18 @@ class TestStatuteCache(unittest.TestCase):
 
     def test_prune_cache(self):
         parser1 = self.cache.get_statute(self.CONTAINS_HIST_TL21_ST401)
-        print(parser1)
-        title_section = f"{parser1.parse_title()[0]}.{parser1.parse_section()[0]}"
+        citation_str = parser1.parse_citation()
 
         # everything in this block is basically a @patch for the time of a document
-        path = os.path.join(self.test_dir, f"{title_section}.json")
+        path = os.path.join(self.test_dir, f"{citation_str}.json")
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        data["cached_at"] = (datetime.now() - timedelta(days=10)).strftime("%Y%m%d")
+        data["cached_at"] = (datetime.now() - timedelta(days=10)).isoformat(timespec="seconds")
         with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f)  
+            json.dump(data, f)
         ##################################################
 
-        self.cache._load_cached_metadata()  
+        self.cache._load_cached_metadata()
         removed = self.cache.prune_cache(datetime.now() - timedelta(days=1))
         self.assertEqual(removed, 1)
-        self.assertNotIn(title_section, self.cache.available_statutes())
+        self.assertNotIn(citation_str, self.cache.available_statutes())

@@ -45,8 +45,7 @@ class StatuteText:
                 node = {"label": None, "text": line, "subsections": []}
                 root.append(node)
                 continue
-
-            seen_structure = True
+            
             node = {"text": line, "subsections": []}
             label_match = re.match(r"^([\w\(\)\.]+)\s+(.*)", line)
 

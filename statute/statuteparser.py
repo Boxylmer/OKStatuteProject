@@ -190,3 +190,5 @@ class StatuteParser:
             raise ValueError(f"Unrecognized section format: {self.full_section}")
         return match.group(1), match.group(2)
     
+    def parse_citation(self) -> str:
+        return f"{self.parse_title()[0]}.{self.parse_section()[0]}"
