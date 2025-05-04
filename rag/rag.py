@@ -27,6 +27,7 @@ class StatuteRAG:
         
 
     def ingest(self, texts: list[str], metadatas: list[dict] | None = None, verbose=False):
+        # TODO needs to ingest a statuteparser instead
         if metadatas is None:
             metadatas = [{} for _ in texts]
         ids = [f"doc_{i}" for i in range(len(texts))]
