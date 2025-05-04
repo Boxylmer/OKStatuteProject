@@ -7,9 +7,9 @@ from typing import Any
 
 
 class StatuteCache:
-    def __init__(self, cache_folder: str):
-        self.cache_folder = Path(cache_folder)
-        os.makedirs(cache_folder, exist_ok=True)
+    def __init__(self, cache_path: str | Path):
+        self.cache_folder = Path(cache_path)
+        os.makedirs(cache_path, exist_ok=True)
 
         self._load_cached_metadata()
 
