@@ -4,3 +4,5 @@ sentence_transformers
 chromadb # gotcha on win11 -> need Visual Studio C++ Build Tools 
 langchain
 langchain-community
+langchain-huggingface 
+langchain-chroma

@@ -1,25 +1,31 @@
 import unittest
 import shutil
 from pathlib import Path
-
 from rag.rag import StatuteRAG
 from rag.utils import download_embedding_model
 
-class TestStatuteRAG(unittest.TestCase):
 
+class TestStatuteRAG(unittest.TestCase):
     def setUp(self):
-        self.model_name = "hkunlp/instructor-base"
+        self.model_name = "sentence-transformers/all-mpnet-base-v2"
         self.model_dir = Path("data") / "embedding_models"
         self.db_path = Path("data") / "test_chroma_db"
+
         self.model_path = download_embedding_model(self.model_name, self.model_dir)
-        self.rag = StatuteRAG(db_path=self.db_path, model_name=self.model_name, model_dir=self.model_dir)
+        self.rag = StatuteRAG(
+            db_path=self.db_path, model_name=self.model_name, model_dir=self.model_dir
+        )
 
     def tearDown(self):
         shutil.rmtree(self.db_path, ignore_errors=True)
 
+
     def test_model_downloaded(self):
         model_path = Path(self.model_dir) / self.model_name.replace("/", "_")
-        self.assertTrue(model_path.exists() and model_path.is_dir(), "Model path should exist after download.")
+        self.assertTrue(
+            model_path.exists() and model_path.is_dir(),
+            "Model path should exist after download.",
+        )
 
     def test_ingest_and_query(self):
         texts = [
@@ -34,14 +40,20 @@ class TestStatuteRAG(unittest.TestCase):
             "Section I. Trials shall be by an impartial jury.",
             "Section J. No law shall impair the obligation of contracts.",
             "Section K. Education shall be free and public.",
-            "Section L. The state shall maintain a balanced budget."
+            "Section L. The state shall maintain a balanced budget.",
         ]
         self.rag.ingest(texts)
 
         query = "What rights do people have regarding free speech?"
         results = self.rag.query(query, top_k=3)
-        
         self.assertTrue(len(results) > 0, "Query should return at least one result.")
-        print("\nTop results for query:", query)
-        for content, metadata in results:
-            print("-", content)
+        self.assertTrue(results[0][0].startswith("Section F"))
+
+
+        query = "Which statute section covers censorship?"
+        results = self.rag.query(query, top_k=3)
+        self.assertTrue(results[0][0].startswith("Section F"))
+
+        query = "Which statute section covers the act of posting bond?"
+        results = self.rag.query(query, top_k=3)
+        self.assertTrue(results[0][0].startswith("Section H") or results[1][0].startswith("Section H") or results[2][0].startswith("Section H"))
