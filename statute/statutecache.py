@@ -80,6 +80,7 @@ class StatuteCache:
         )
 
     def available_statutes(self) -> list[str]:
+        "Get list of citations of statutes available in the cache."
         return sorted(list(self.citations))
 
     def prune_cache(self, cutoff: datetime) -> int:

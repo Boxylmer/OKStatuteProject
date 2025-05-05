@@ -17,11 +17,12 @@ cache.available_statutes()
 st1 = cache.get_statute_by_citation(cache.available_statutes()[5])
 st1.formatted_text()
 st1.subsection_names()
-
-
 st1.structured_text()
-st1.formatted_text()
 st1.parse_citation()
 
-for section in st1.structured_text():
-    print(section)
+lengths = []
+for statute_name in cache.available_statutes():
+    st_text = cache.get_statute_by_citation(statute_name).formatted_text()
+    lengths.append(len(st_text)) 
+
+
