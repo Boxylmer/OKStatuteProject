@@ -135,6 +135,9 @@ class StatuteParser:
     def formatted_text(self, **kwargs) -> str:
         return self.statute_text.as_text(**kwargs)
 
+    def structured_text(self) -> list[dict]:
+        return self.statute_text.structured_data
+
     # StatuteText wrappers
     def text_json(self):
         return self.statute_text.as_json()
@@ -147,10 +150,14 @@ class StatuteParser:
     def subsection_names(self):
         return self.statute_text.subsection_names()
 
+    def get_subsection(self, subsection_name):
+        return self.statute_text._get_subsection(subsection_name=subsection_name)
+
     def parse_title(self) -> tuple[str, str]:
         """
         Extracts the title number and title label from a line like:
         'Title 124A. Crimes and Punishments'
+        returns (title_id, title_description)
         """
         match = re.match(r"Title\s+([0-9A-Za-z]+)\.\s*(.+)", self.full_title)
         if not match:
@@ -161,6 +168,7 @@ class StatuteParser:
         """
         Extracts the section number and label from a line like:
         'Section 301 - Prevention of Legislative Meetings - Penalty'
+        returns (section_id, section_description)
         """
         match = re.match(r"Section\s+([0-9A-Za-z.-]+)\s*-\s*(.+)", self.full_section)
         if not match:

@@ -19,4 +19,9 @@ st1.formatted_text()
 st1.subsection_names()
 
 
+st1.structured_text()
+st1.formatted_text()
+st1.parse_citation()
 
+for section in st1.structured_text():
+    print(section)
