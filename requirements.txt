@@ -1,3 +1,4 @@
+accelerate
 bs4
 requests
 sentence_transformers
@@ -6,3 +7,5 @@ langchain
 langchain-community
 langchain-huggingface 
 langchain-chroma
+optimum
+gptqmodel
