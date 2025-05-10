@@ -1,113 +1,95 @@
-import os
-
 from pathlib import Path
-from sentence_transformers import SentenceTransformer
-from huggingface_hub import snapshot_download
-from transformers import (
-    AutoConfig,
-    AutoTokenizer,
-    AutoModelForCausalLM,
-    AutoModelForSeq2SeqLM,
-    pipeline
-)
-import torch
+import requests # type: ignore
+import zipfile
+import tarfile
+
+from llama_cpp import Llama
 
 DATA_PATH = Path("data")
 
 
-
-def download_embedding_model(
-    model_name: str = "hkunlp/instructor-base",
-    model_dir: str | Path = DATA_PATH / "embedding_models",
-    verbose=False
-):
-    model_path = os.path.join(model_dir, model_name.replace("/", "_"))
-    if not os.path.exists(model_path):
-        if verbose:
-            print(f"Downloading model {model_name} to {model_path}...")
-        model = SentenceTransformer(model_name)
-        model.save(model_path)
-    else:
-        if verbose:
-            print(f"Model {model_name} already present at {model_path}")
-    return model_path
-
-
-def download_quantized_model(
-    repo_id: str,
-    cache_dir: Path = Path("data") / "llm_models",
-    verbose: bool = True
-) -> Path:
+def download_model(model_name: str):
     """
-    Downloads a Hugging Face model repo (can include quantized models like GPTQ).
-    Returns local path to model directory.
-    """
-    local_dir = cache_dir / repo_id.replace("/", "_")
-
-    if not (local_dir.exists() and any(local_dir.iterdir())):
-        if verbose:
-            print(f"⬇️ Downloading model '{repo_id}' to {local_dir}...")
-        snapshot_download(
-            repo_id=repo_id,
-            local_dir=local_dir,
-            local_dir_use_symlinks=False,
-        )
-    else:
-        if verbose:
-            print(f"📦 Model already exists at {local_dir}")
-
-    return local_dir
-
-# TODO Check and rewrite all of this, this entire function is written by chatgpt as a first-draft. 
-def load_transformers_pipeline(
-    model_path: str | Path,
-    use_gpu: bool = True,
-    verbose: bool = True,
-):
-    """
-    Loads a pipeline from a Transformers-compatible quantized model path, including padding and stopping settings.
-    """
-    model_path = str(model_path)
-
-    # Load model config to determine architecture
-    config = AutoConfig.from_pretrained(model_path)
-    architectures = config.architectures or []
-
-    # Check model type (CausalLM or Seq2Seq)
-    is_seq2seq = any("Seq2Seq" in arch or "T5" in arch or "Bart" in arch for arch in architectures)
-    is_causal_lm = any("CausalLM" in arch or "GPT" in arch or "LLaMA" in arch for arch in architectures)
-
-    if not is_seq2seq and not is_causal_lm:
-        if verbose:
-            print("⚠️ Could not determine architecture. Defaulting to CausalLM.")
-        is_causal_lm = True
-
-    # tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
-
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token  # Use eos_token as pad_token if not available
-
-    model_cls = AutoModelForSeq2SeqLM if is_seq2seq else AutoModelForCausalLM
-
-    # Load the model with or without GPU support, using accelerate's device management
-    model = model_cls.from_pretrained(
-        model_path,
-        device_map="auto" if use_gpu else None,
-        torch_dtype=torch.float16 if use_gpu else torch.float32,
-        low_cpu_mem_usage=True,
-    )
-
-    # Define task type
-    task = "text2text-generation" if is_seq2seq else "text-generation"
+    Downloads and saves the GGUF model to a specified directory.
     
-    # Load pipeline without specifying `device`, as accelerate will manage it
-    pipe = pipeline(task, model=model, tokenizer=tokenizer)
+    Args:
+    model_name (str): Name for the model, used to generate the download URL.
+    
+    Returns:
+    Path: The path to the downloaded model directory.
+    """
+    # Define the URL and directory based on the model name
+    model_url = f"https://huggingface.co/{model_name}/resolve/main/{model_name}.gguf"
+    save_dir = DATA_PATH / 'models' / model_name
+    save_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Check if model already exists
+    if save_dir.exists():
+        print(f"Model {model_name} already exists at {save_dir}")
+        return save_dir
+    
+    # Start the download
+    print(f"Downloading model {model_name} from {model_url} to {save_dir}...")
+    try:
+        response = requests.get(model_url, stream=True)
+        response.raise_for_status()
+        
+        # Save the model file
+        model_file = save_dir / f"{model_name}.gguf"
+        with open(model_file, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        print(f"Model downloaded successfully to {model_file}")
+        
+        return save_dir
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to download model: {e}")
+        return None
+    
+def unzip_or_extract(model_path: Path):
+    """
+    Checks if the model is a .zip or .tar.gz file and extracts it.
+    
+    Args:
+    model_path (Path): Path to the model file.
+    """
+    if model_path.suffix == '.zip':
+        with zipfile.ZipFile(model_path, 'r') as zip_ref:
+            zip_ref.extractall(model_path.parent)
+        print(f"Model unzipped to {model_path.parent}")
+    elif model_path.suffix in ['.tar', '.tar.gz', '.tgz']:
+        with tarfile.open(model_path, 'r:*') as tar_ref:
+            tar_ref.extractall(model_path.parent)
+        print(f"Model extracted to {model_path.parent}")
+    else:
+        print(f"Model is already in GGUF format: {model_path}")
 
-    # Optionally print the pipeline status
-    if verbose:
-        print(f"✅ Loaded pipeline: {task} (from {model_path})")
+def get_callable_model(model_name: str):
+    """
+    Downloads the GGUF model, extracts it if needed, and returns a callable model.
+    
+    Args:
+    model_name (str): Model name used for the file.
+    
+    Returns:
+    callable: A callable function that uses the model for inference.
+    """
+    # Download the model and get the path
+    model_path = download_model(model_name)
+    
+    if model_path:
+        model_file = model_path / f"{model_name}.gguf"
+        unzip_or_extract(model_file)
+        
+        # Initialize the Llama model
+        model = Llama(model_path=str(model_file))
 
-    # Return the pipeline
-    return pipe
+        # Return a callable model
+        def model_call(prompt: str):
+            result = model(prompt)
+            return result["text"]
 
+        return model_call
+    else:
+        print("Failed to load the model.")
+        return None

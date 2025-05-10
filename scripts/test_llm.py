@@ -1,24 +1,15 @@
-from rag.utils import download_quantized_model
-from rag.utils import load_transformers_pipeline  
+from rag.utils import download_quantized_model, load_transformers_pipeline
 
+# Use a Transformers 4-bit compatible model (AWQ or original weights)
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
-import torch
-
-model_path = download_quantized_model("TheBloke/Mistral-7B-Instruct-v0.2-GPTQ")
-
-
-# llm_pipeline = load_transformers_pipeline(model_path, use_gpu=True)
-
+model_path = download_quantized_model("TheBloke/Mistral-7B-Instruct-v0.2-GPTQ")  # or TheBloke/*-AWQ
 tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
 model = AutoModelForCausalLM.from_pretrained(
     model_path,
     device_map="auto",
-    torch_dtype=torch.float16,
-    trust_remote_code=True,
-    revision="main"
+    trust_remote_code=True
 )
-
-llm_pipeline = pipeline("text-generation", model=model, tokenizer=tokenizer)
+llm_pipeline = load_transformers_pipeline(model_path, use_gpu=True)
 
 prompt = (
     "### Instruction:\n"
@@ -29,5 +20,6 @@ prompt = (
     "The right to control the disposition of the remains of a deceased person, the location, manner and conditions of disposition, and arrangements for funeral goods and services vests in the following order, provided the person is eighteen (18) years of age or older and of sound mind: 1. The decedent, provided the decedent has entered into a pre-need funeral services contract or executed a written document that meets the requirements of the State of Oklahoma;"
     "### Rows:\n"
 )
+
 response = llm_pipeline(prompt, max_new_tokens=512)
 print(response[0]["generated_text"])
