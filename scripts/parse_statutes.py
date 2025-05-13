@@ -20,13 +20,14 @@ for link in title_21_links:
 
 cache.available_statutes()
 
-st1 = cache.get_statute_by_citation(cache.available_statutes()[876])
+st1 = cache.get_statute_by_citation(cache.available_statutes()[249])
 st1.structured_text()
 len(st1.formatted_text())
 st1.subsection_names()
 st1.parse_citation()
 
 lengths = []
+queued_statutes = []
 for i, statute_name in enumerate(cache.available_statutes()):
     st = cache.get_statute_by_citation(statute_name)
     if bool(re.fullmatch(r"20[a-zA-Z]", st.parse_section()[0])):
@@ -35,20 +36,19 @@ for i, statute_name in enumerate(cache.available_statutes()):
     st_text = st.formatted_text()
     le = len(st_text)
     lengths.append(le) 
-    if le == 10984:
-        
-
-        # print(cache.get_statute_by_citation(statute_name).subsection_names())
-        # print(cache.get_statute_by_citation(statute_name).formatted_text())
+    if le == 12353: # long one
+        print(cache.get_statute_by_citation(statute_name).subsection_names())
+        print(cache.get_statute_by_citation(statute_name).formatted_text())
         print(i)
         cache.get_statute_by_citation(statute_name).parse_citation()
+    queued_statutes.append(statute_name)
 
-sorted(lengths)
+print(sorted(lengths))
 
 
 instruction_paralegal = """
 ### INSTRUCTIONS:
-You are an automated paralegal. Your task is to extract **only explicitly stated** penalties from statutes into JSON data.
+You are an automated paralegal. Your task is to extract **penalties or administrative actions** imposed by statutes into JSON data.
 
 Only output a list with items containing these entries:
 "Offense, Fine, Punishment, Restitution, Exceptions, Notes, Type"
@@ -58,30 +58,29 @@ COLUMN RULES:
 - Fine: [< or > or exact][dollar amount] Use only if an exact dollar amount or range is stated. E.g., "< $500", "$500 to $1000". Do not use commas in numbers.
 - Punishment: "[time range] [jail / prison]" Use only if duration is explicitly stated. E.g., "30 days jail", "1-2 years prison".
     - use strictly "prison" or "jail" when specifying the punishment suffix.
-- Restitution: Include only if mentioned (e.g., "license suspension", "community service"). Things that are not time served or fines.
+- Restitution: Include license suspension, community service, or administrative actions. Only use if explicitly stated. E.g., "Handgun license suspended for 3 months" → Restitution: "3-month license suspension"
 - Exceptions: Include only if the statute lists exceptions explicitly.
-- Notes: Any minor caveats or stipulations. Major caveats or stipulations become new rows.
+- Notes: Details such as where a statute applies or does not apply. Major caveats or stipulations become new rows.
 - Type: "[misdemeanor / felony / N/a]" Use only those terms are used. Otherwise, write "N/a".
 
 STRICT RULES:
 - Do NOT infer or guess values. Leave fields blank if information is not directly stated in the statute.
-- Do NOT duplicate offense names — distinguish them using thresholds or qualifiers.
 - Do NOT include dollar signs in Punishment (it's for jail/prison durations only).
 - Do NOT output "Felony" unless that word appears in the statute.
+- Think carefully about ranges. Is the fine $X, or is it up to $X?
 - If multiple rows have similar offenses, include clear qualifiers in the Offense name to distinguish them (e.g., “Use of unauthorized card (≤ $500)” and “Use of unauthorized card (>$500)”).
-- Notes should summarize thresholds or important conditions concisely, not just copy full statute sentences.
-- If the statute doesn't define a crime, but adds conditions to other statutes, denote this in the offense name (Condition: ...)
+- Notes should summarize thresholds or important conditions concisely, not just copy full statute sentences. (e.g., "Only when X, Y, or Z")
+- ALWAYS include all columns in an entry, putting N/a where information is not available.
 
-IF NO PENALTIES:
-If the statute does not contain any fines, punishments, or criminal penalties, respond exactly with:
-No entries
+IF NOTHING IS EXTRACTABLE: Return an empty list -> []
 """
 
+# one off script to parse a statute
 statute = "### STATUTE: " + st1.formatted_text()
 prompt = instruction_paralegal + "\n" + statute
-response_data = generate(prompt, model="qwen3:8b", num_ctx=32768/2, top_k=10, top_p=0.5)
+response_data = generate(prompt, model="qwen3:8b", num_ctx=32768/2, top_k=5, top_p=0.5)
 print(response_data["response"])
-print("Prompt tokens: ", response_data["prompt_eval_count"])
+print("Prompt tokens: ", response_data["prompt_eval_count"], response_data["eval_count"])
 print("Expected p.t.: ", len(prompt.split()) * 4/3)
 
 print("Eval tokens: ", response_data["eval_count"])
