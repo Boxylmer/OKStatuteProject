@@ -179,10 +179,17 @@ class StatuteParser:
         return f"{self.parse_title()[0]}.{self.parse_section()[0]}"
 
     @staticmethod
-    def get_statute_links(statute_title_url, ignore_repealed=True):
+    def get_statute_links(statute_title_url, ignore_repealed=True, verbose=False):
+        if verbose:
+            print("Getting raw link page")
         response = requests.get(statute_title_url)
+        if verbose:
+            print("Response recieved. Parsing links")
+
         soup = BeautifulSoup(response.text, "html.parser")
         statute_links = []
+        if verbose:
+            print("Links parsed. Filtering for repealed and invalid statute links")
 
         for link in soup.find_all("a", href=True):
             text = link.get_text(strip=True)
