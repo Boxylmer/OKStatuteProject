@@ -3,10 +3,10 @@ from pathlib import Path
 from sentence_transformers import SentenceTransformer
 
 
-def download_embedding_model(
+def ensure_sentencetransformer_model(
     model_name: str,
     model_dir: str | Path = Path("data") / "embedding_models",
-    verbose=False
+    verbose=False,
 ):
     model_path = os.path.join(model_dir, model_name.replace("/", "_"))
     if not os.path.exists(model_path):

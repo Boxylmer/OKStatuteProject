@@ -2,7 +2,7 @@ import unittest
 import shutil
 from pathlib import Path
 from rag.rag import StatuteRAG
-from rag.utils import download_embedding_model
+from rag.utils import ensure_sentencetransformer_model
 from statute.statuteparser import StatuteParser
 
 import numpy as np
@@ -13,12 +13,12 @@ TEST_DATA_DIR = Path("test/test_data")
 class TestStatuteRAG(unittest.TestCase):
     def setUp(self):
         self.model_name = "sentence-transformers/all-mpnet-base-v2"
-        # self.model_name = "intfloat/e5-base-v2"
-        # self.model_name = "BAAI/bge-large-en-v1.5"
         self.model_dir = Path("data") / "embedding_models"
         self.db_path = Path("data") / "test_chroma_db"
 
-        self.model_path = download_embedding_model(self.model_name, self.model_dir)
+        self.model_path = ensure_sentencetransformer_model(
+            self.model_name, self.model_dir
+        )
 
     def tearDown(self):
         shutil.rmtree(self.db_path, ignore_errors=True)
@@ -46,9 +46,9 @@ class TestStatuteRAG(unittest.TestCase):
             "Section L. The state shall maintain a balanced budget.",
         ]
         rag = StatuteRAG(
-            model_name=self.model_name,
-            model_path=self.model_dir,
-            persist=False,
+            embedding_model_name=self.model_name,
+            model_dir=self.model_dir,
+            db_path=False,
             collection_name="test_ingest_and_query",
         )
         rag._ingest(texts, metadatas=[{"citation": i} for i in range(len(texts))])
@@ -70,7 +70,6 @@ class TestStatuteRAG(unittest.TestCase):
 
         query = "Which statute section covers the act of posting bond?"
         results = rag.query(query, top_k=3)
-        print(results)
         self.assertTrue(
             results[0][0].startswith("Section H")  # -> returned section C
             or results[1][0].startswith("Section H")  # -> returned section B
@@ -79,9 +78,9 @@ class TestStatuteRAG(unittest.TestCase):
 
     def test_ingest_statute(self):
         rag = StatuteRAG(
-            model_name=self.model_name,
-            model_path=self.model_dir,
-            persist=False,
+            embedding_model_name=self.model_name,
+            model_dir=self.model_dir,
+            db_path=False,
             collection_name="test_ingest_statute",
         )
         test_html_paths = [
@@ -108,9 +107,9 @@ class TestStatuteRAG(unittest.TestCase):
 
     def test_similarity_indexing(self):
         rag = StatuteRAG(
-            model_name=self.model_name,
-            model_path=self.model_dir,
-            persist=False,
+            embedding_model_name=self.model_name,
+            model_dir=self.model_dir,
+            db_path=False,
             collection_name="test_similarity_indexing",
         )
 

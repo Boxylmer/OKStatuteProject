@@ -6,7 +6,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from transformers import AutoTokenizer
 
-from rag.utils import download_embedding_model
+from rag.utils import ensure_sentencetransformer_model
 from statute.statuteparser import StatuteParser
 
 
@@ -17,13 +17,15 @@ class StatuteRAG:
     def __init__(
         self,
         db_path: Path | None = Path("data") / "rag_db",
-        model_name="nlpaueb/legal-bert-small-uncased",
-        model_path: Path = Path("data") / "embedding_models",
+        embedding_model_name: str = "sentence-transformers/all-mpnet-base-v2",
+        reranker_model_name: str | None = None,  
+        model_dir: Path = Path("data") / "sentencetransformer_models",
         collection_name="statutes",
-        persist=True,
         verbose=False,
     ):
-        self.model_path = download_embedding_model(model_name, model_path)
+        self.model_path = ensure_sentencetransformer_model(
+            embedding_model_name, model_dir
+        )
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
         self.max_tokens = (
             self.tokenizer.model_max_length
@@ -31,13 +33,13 @@ class StatuteRAG:
             else 512
         )
         self.embeddings = HuggingFaceEmbeddings(model_name=self.model_path)
-        
+
         self.collection_name = collection_name
 
         self.QUERY_TOKEN_PADDING = self._get_token_count(self.QUERY_PREFIX)
         self.PASSAGE_TOKEN_PADDING = self._get_token_count(self.PASSAGE_PREFIX)
 
-        if persist:
+        if db_path:
             persist_directory = str(db_path)
         else:
             persist_directory = None
@@ -132,7 +134,10 @@ class StatuteRAG:
         }
 
         texts, metadatas = self._split_long_chunk(
-            full_text, base_meta, token_padding=self.PASSAGE_TOKEN_PADDING, append_token_count_to_metadata=True
+            full_text,
+            base_meta,
+            token_padding=self.PASSAGE_TOKEN_PADDING,
+            append_token_count_to_metadata=True,
         )
 
         ids = [f"{citation}_chunk{i}" for i in range(len(texts))]
@@ -147,7 +152,7 @@ class StatuteRAG:
         for r in results:
             content = r.page_content
             if content.startswith(self.PASSAGE_PREFIX):
-                content = content[len(self.PASSAGE_PREFIX):].lstrip()
+                content = content[len(self.PASSAGE_PREFIX) :].lstrip()
             clean_results.append((content, r.metadata, r.id))
 
         return clean_results
