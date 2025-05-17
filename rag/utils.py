@@ -4,7 +4,7 @@ from sentence_transformers import SentenceTransformer
 
 
 def download_embedding_model(
-    model_name: str = "hkunlp/instructor-base",
+    model_name: str,
     model_dir: str | Path = Path("data") / "embedding_models",
     verbose=False
 ):

@@ -10,18 +10,18 @@ from rag.utils import download_embedding_model
 from statute.statuteparser import StatuteParser
 
 
-
 class StatuteRAG:
-
-    QUERY_PREFIX = "query: "
-    PASSAGE_PREFIX = "passage: "
+    QUERY_PREFIX = "query:"
+    PASSAGE_PREFIX = "passage:"
 
     def __init__(
         self,
         db_path: Path | None = Path("data") / "rag_db",
-        model_name="nlpaueb/legal-bert-base-uncased",
+        model_name="nlpaueb/legal-bert-small-uncased",
         model_path: Path = Path("data") / "embedding_models",
+        collection_name="statutes",
         persist=True,
+        verbose=False,
     ):
         self.model_path = download_embedding_model(model_name, model_path)
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
@@ -31,15 +31,17 @@ class StatuteRAG:
             else 512
         )
         self.embeddings = HuggingFaceEmbeddings(model_name=self.model_path)
-        self.collection_name = "statutes"
+        
+        self.collection_name = collection_name
 
         self.QUERY_TOKEN_PADDING = self._get_token_count(self.QUERY_PREFIX)
         self.PASSAGE_TOKEN_PADDING = self._get_token_count(self.PASSAGE_PREFIX)
-        
-        persist_directory = None
+
         if persist:
             persist_directory = str(db_path)
-        
+        else:
+            persist_directory = None
+
         self.vectorstore = Chroma(
             collection_name=self.collection_name,
             embedding_function=self.embeddings,
@@ -47,28 +49,43 @@ class StatuteRAG:
             client_settings=Settings(anonymized_telemetry=False),
         )
 
-    def _split_long_chunks(self, texts: list[str], metadatas: list[dict], token_padding=0):
+        if verbose:
+            print(f"StatuteRAG initialized with {self.max_tokens} token length.")
+
+    def _split_long_chunk(
+        self,
+        text: str,
+        metadata: dict,
+        token_padding=0,
+        chunk_overlap=20,
+        append_token_count_to_metadata=False,
+    ):
         splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
-            self.tokenizer, chunk_size=self.max_tokens - token_padding, chunk_overlap=20
+            self.tokenizer,
+            chunk_size=self.max_tokens - token_padding,
+            chunk_overlap=chunk_overlap,
         )
         split_texts = []
         split_metadatas = []
 
-        for text, meta in zip(texts, metadatas):
-            token_count = self._get_token_count(text)
-            if token_count <= self.max_tokens:
-                split_texts.append(text)
-                split_metadatas.append(meta)
-            else:
-                print(
-                    f"Text for citation {meta.get('citation')} exceeds the maximum ({self.max_tokens}) tokens with {token_count} tokens, splitting."
-                )
-                chunks = splitter.split_text(text)
-                for i, chunk in enumerate(chunks):
-                    new_meta = meta.copy()
-                    new_meta["chunk_index"] = i
-                    split_texts.append(chunk)
-                    split_metadatas.append(new_meta)
+        token_count = self._get_token_count(text)
+
+        if append_token_count_to_metadata:
+            metadata["token_count"] = token_count
+
+        if token_count <= self.max_tokens:
+            split_texts.append(text)
+            split_metadatas.append(metadata)
+        else:
+            chunks = splitter.split_text(text)
+            print(
+                f"Text for citation {metadata.get('citation')} exceeds the maximum ({self.max_tokens}) tokens with {token_count} tokens, splitting into {len(chunks)} chunks."
+            )
+            for i, chunk in enumerate(chunks):
+                new_meta = metadata.copy()
+                new_meta["chunk_index"] = i
+                split_texts.append(chunk)
+                split_metadatas.append(new_meta)
 
         return split_texts, split_metadatas
 
@@ -79,7 +96,7 @@ class StatuteRAG:
             return_token_type_ids=False,
             return_length=True,
             truncation=False,
-            max_length=1e30
+            max_length=1e30,
         )["length"][0]
         return token_count
 
@@ -96,8 +113,8 @@ class StatuteRAG:
         if ids is None:
             ids = [f"doc_{i}" for i in range(len(texts))]
 
-        formatted_texts = [f'{self.PASSAGE_PREFIX} {text}' for text in texts]
- 
+        formatted_texts = [f"{self.PASSAGE_PREFIX} {text}" for text in texts]
+
         self.vectorstore.add_texts(formatted_texts, metadatas=metadatas, ids=ids)
         if verbose:
             print(f"Ingested {len(texts)} documents into ChromaDB.")
@@ -114,7 +131,9 @@ class StatuteRAG:
             "section": section,
         }
 
-        texts, metadatas = self._split_long_chunks([full_text], [base_meta], token_padding=self.PASSAGE_TOKEN_PADDING)
+        texts, metadatas = self._split_long_chunk(
+            full_text, base_meta, token_padding=self.PASSAGE_TOKEN_PADDING, append_token_count_to_metadata=True
+        )
 
         ids = [f"{citation}_chunk{i}" for i in range(len(texts))]
 
@@ -124,4 +143,11 @@ class StatuteRAG:
         formatted_query_text = f"{self.QUERY_PREFIX} {query_text}"
         results = self.vectorstore.similarity_search(formatted_query_text, k=top_k)
 
-        return [(r.page_content, r.metadata, r.id) for r in results]
+        clean_results = []
+        for r in results:
+            content = r.page_content
+            if content.startswith(self.PASSAGE_PREFIX):
+                content = content[len(self.PASSAGE_PREFIX):].lstrip()
+            clean_results.append((content, r.metadata, r.id))
+
+        return clean_results
