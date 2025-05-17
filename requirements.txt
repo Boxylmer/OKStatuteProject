@@ -1,9 +1,10 @@
 bs4
-requests
 chromadb # gotcha on win11 -> need Visual Studio C++ Build Tools 
 langchain
+langchain-chroma
 langchain-community
 langchain-huggingface 
-langchain-chroma
 numpy
 ollama
+requests
+sentence-transformers

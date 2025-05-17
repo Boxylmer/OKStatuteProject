@@ -2,8 +2,10 @@ from pathlib import Path
 
 from chromadb.config import Settings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
+
 from langchain_chroma import Chroma
+from langchain_huggingface import HuggingFaceEmbeddings
+from sentence_transformers import CrossEncoder
 from transformers import AutoTokenizer
 
 from rag.utils import ensure_sentencetransformer_model
@@ -18,21 +20,34 @@ class StatuteRAG:
         self,
         db_path: Path | None = Path("data") / "rag_db",
         embedding_model_name: str = "sentence-transformers/all-mpnet-base-v2",
-        reranker_model_name: str | None = None,  
+        reranking_model_name: str | None = None,
         model_dir: Path = Path("data") / "sentencetransformer_models",
         collection_name="statutes",
         verbose=False,
     ):
-        self.model_path = ensure_sentencetransformer_model(
+        self.embedding_model_path = ensure_sentencetransformer_model(
             embedding_model_name, model_dir
         )
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.embedding_model_path)
         self.max_tokens = (
             self.tokenizer.model_max_length
             if self.tokenizer.model_max_length < 1000000
             else 512
         )
-        self.embeddings = HuggingFaceEmbeddings(model_name=self.model_path)
+        self.embedding_model = HuggingFaceEmbeddings(model_name=self.embedding_model_path)
+        if verbose:
+                print(f"Embedding model loaded: {embedding_model_name}")
+
+        if reranking_model_name:
+            self.reranking_model_path = ensure_sentencetransformer_model(
+                reranking_model_name, model_dir
+            )
+            self.reranking_model = CrossEncoder(model_name_or_path=self.reranking_model_path)
+            if verbose:
+                print(f"Reranker model loaded: {reranking_model_name}")
+
+        else:
+            self.reranking_model = None
 
         self.collection_name = collection_name
 
@@ -46,7 +61,7 @@ class StatuteRAG:
 
         self.vectorstore = Chroma(
             collection_name=self.collection_name,
-            embedding_function=self.embeddings,
+            embedding_function=self.embedding_model,
             persist_directory=persist_directory,
             client_settings=Settings(anonymized_telemetry=False),
         )
@@ -144,15 +159,24 @@ class StatuteRAG:
 
         self._ingest(texts, metadatas, ids, verbose=verbose)
 
-    def query(self, query_text: str, top_k: int = 3):
+    def query(self, query_text: str, top_k: int = 3, rerank_if_available=True):
         formatted_query_text = f"{self.QUERY_PREFIX} {query_text}"
         results = self.vectorstore.similarity_search(formatted_query_text, k=top_k)
 
-        clean_results = []
+        clean_results: list[tuple[str, dict, str | None]] = []
         for r in results:
             content = r.page_content
             if content.startswith(self.PASSAGE_PREFIX):
                 content = content[len(self.PASSAGE_PREFIX) :].lstrip()
             clean_results.append((content, r.metadata, r.id))
 
-        return clean_results
+        if rerank_if_available and self.reranking_model:
+            return self._rerank(query_text, clean_results)
+        else:
+            return clean_results
+
+    def _rerank(self, query: str, results: list[tuple[str, dict, str | None]]):
+        inputs = [(query, text) for text, _, _ in results]
+        scores = self.reranking_model.predict(inputs)
+        scored_results = sorted(zip(scores, results), key=lambda x: x[0], reverse=True)
+        return [res for _, res in scored_results]
