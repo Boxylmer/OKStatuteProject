@@ -1,5 +1,7 @@
 import os
 from pathlib import Path
+
+import numpy as np
 from sentence_transformers import SentenceTransformer
 
 
@@ -18,3 +20,10 @@ def ensure_sentencetransformer_model(
         if verbose:
             print(f"Model {model_name} already present at {model_path}")
     return model_path
+
+
+
+def cosine_similarity(a, b):
+    a = np.array(a)
+    b = np.array(b)
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))

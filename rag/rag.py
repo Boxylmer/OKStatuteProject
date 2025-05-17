@@ -8,7 +8,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from sentence_transformers import CrossEncoder
 from transformers import AutoTokenizer
 
-from rag.utils import ensure_sentencetransformer_model
+from rag.utils import ensure_sentencetransformer_model, cosine_similarity
 from statute.statuteparser import StatuteParser
 
 
@@ -34,15 +34,19 @@ class StatuteRAG:
             if self.tokenizer.model_max_length < 1000000
             else 512
         )
-        self.embedding_model = HuggingFaceEmbeddings(model_name=self.embedding_model_path)
+        self.embedding_model = HuggingFaceEmbeddings(
+            model_name=self.embedding_model_path
+        )
         if verbose:
-                print(f"Embedding model loaded: {embedding_model_name}")
+            print(f"Embedding model loaded: {embedding_model_name}")
 
         if reranking_model_name:
             self.reranking_model_path = ensure_sentencetransformer_model(
                 reranking_model_name, model_dir
             )
-            self.reranking_model = CrossEncoder(model_name_or_path=self.reranking_model_path)
+            self.reranking_model = CrossEncoder(
+                model_name_or_path=self.reranking_model_path
+            )
             if verbose:
                 print(f"Reranker model loaded: {reranking_model_name}")
 
@@ -159,24 +163,53 @@ class StatuteRAG:
 
         self._ingest(texts, metadatas, ids, verbose=verbose)
 
-    def query(self, query_text: str, top_k: int = 3, rerank_if_available=True):
+    def query(
+        self, query_text: str, top_k: int = 3, rerank_if_available=True, verbose=False
+    ):
         formatted_query_text = f"{self.QUERY_PREFIX} {query_text}"
-        results = self.vectorstore.similarity_search(formatted_query_text, k=top_k)
+        raw_results = self.vectorstore.similarity_search(formatted_query_text, k=top_k)
 
         clean_results: list[tuple[str, dict, str | None]] = []
-        for r in results:
+
+        for r in raw_results:
             content = r.page_content
             if content.startswith(self.PASSAGE_PREFIX):
                 content = content[len(self.PASSAGE_PREFIX) :].lstrip()
             clean_results.append((content, r.metadata, r.id))
 
         if rerank_if_available and self.reranking_model:
-            return self._rerank(query_text, clean_results)
+            results = self._rerank(query_text, clean_results)
         else:
-            return clean_results
+            results = clean_results
 
-    def _rerank(self, query: str, results: list[tuple[str, dict, str | None]]):
+        if verbose:
+            query_embedding = self.embedding_model.embed_query(query_text)
+            scores = [
+                cosine_similarity(
+                    self.embedding_model.embed_query(res[0]), query_embedding
+                )
+                for res in results
+            ]
+            res_scores = [
+                (round(float(score), ndigits=2), result[0][0:10])
+                for result, score in zip(results, scores)
+            ]
+            print(
+                f"RAG results (rerank={rerank_if_available and (self.reranking_model is not None)}): {res_scores}"
+            )
+
+        return results
+
+    def _rerank(
+        self, query: str, results: list[tuple[str, dict, str | None]], verbose=False
+    ):
         inputs = [(query, text) for text, _, _ in results]
-        scores = self.reranking_model.predict(inputs)
+        scores = self.reranking_model.predict(
+            inputs,
+            show_progress_bar=verbose,
+        )
         scored_results = sorted(zip(scores, results), key=lambda x: x[0], reverse=True)
+        # return scored_results # TODO stopped here, need to return scores back to report and debug for verbose=true
+        # TODO Actually, probably just "return" the rerank with verbose=true and let rerank return what it wants, it's the same format anyway
         return [res for _, res in scored_results]
+
