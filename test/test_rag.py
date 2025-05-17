@@ -11,6 +11,7 @@ TEST_DATA_DIR = Path("test/test_data")
 class TestStatuteRAG(unittest.TestCase):
     def setUp(self):
         self.model_name = "sentence-transformers/all-mpnet-base-v2"
+        # self.model_name = "nlpaueb/legal-bert-base-uncased"
         self.model_dir = Path("data") / "embedding_models"
         self.db_path = Path("data") / "test_chroma_db"
 

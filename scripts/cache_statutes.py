@@ -15,10 +15,4 @@ for link in title_21_links:
     parser = cache.get_statute(link)
     print("Cached:", parser.parse_citation())
 
-cache.available_statutes()
-
-st1 = cache.get_statute_by_citation(cache.available_statutes()[150])
-st1.structured_text()
-len(st1.formatted_text())
-st1.subsection_names()
-st1.parse_citation()
+print(cache.available_statutes())

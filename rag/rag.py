@@ -1,17 +1,21 @@
 from pathlib import Path
-import warnings
 
 from chromadb.config import Settings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
-from rag.utils import download_embedding_model
 from transformers import AutoTokenizer
 
+from rag.utils import download_embedding_model
 from statute.statuteparser import StatuteParser
 
 
+
 class StatuteRAG:
+
+    QUERY_PREFIX = "query: "
+    PASSAGE_PREFIX = "passage: "
+
     def __init__(
         self,
         db_path: Path | None = Path("data") / "rag_db",
@@ -27,38 +31,31 @@ class StatuteRAG:
             else 512
         )
         self.embeddings = HuggingFaceEmbeddings(model_name=self.model_path)
-        self.collection_name = "rag_collection"
+        self.collection_name = "statutes"
 
+        self.QUERY_TOKEN_PADDING = self._get_token_count(self.QUERY_PREFIX)
+        self.PASSAGE_TOKEN_PADDING = self._get_token_count(self.PASSAGE_PREFIX)
+        
+        persist_directory = None
         if persist:
-            self.vectorstore = Chroma(
-                collection_name=self.collection_name,
-                embedding_function=self.embeddings,
-                persist_directory=str(db_path),
-                client_settings=Settings(anonymized_telemetry=False),
-            )
-        else:
-            self.vectorstore = Chroma(
-                collection_name=self.collection_name,
-                embedding_function=self.embeddings,
-                client_settings=Settings(anonymized_telemetry=False),
-            )
+            persist_directory = str(db_path)
+        
+        self.vectorstore = Chroma(
+            collection_name=self.collection_name,
+            embedding_function=self.embeddings,
+            persist_directory=persist_directory,
+            client_settings=Settings(anonymized_telemetry=False),
+        )
 
-    def _split_long_chunks(self, texts: list[str], metadatas: list[dict]):
+    def _split_long_chunks(self, texts: list[str], metadatas: list[dict], token_padding=0):
         splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
-            self.tokenizer, chunk_size=self.max_tokens, chunk_overlap=20
+            self.tokenizer, chunk_size=self.max_tokens - token_padding, chunk_overlap=20
         )
         split_texts = []
         split_metadatas = []
 
         for text, meta in zip(texts, metadatas):
-            token_count = self.tokenizer(
-                text,
-                return_attention_mask=False,
-                return_token_type_ids=False,
-                return_length=True,
-                truncation=False,
-                max_length=1e30
-            )["length"][0]
+            token_count = self._get_token_count(text)
             if token_count <= self.max_tokens:
                 split_texts.append(text)
                 split_metadatas.append(meta)
@@ -75,6 +72,17 @@ class StatuteRAG:
 
         return split_texts, split_metadatas
 
+    def _get_token_count(self, text: str):
+        token_count = self.tokenizer(
+            text,
+            return_attention_mask=False,
+            return_token_type_ids=False,
+            return_length=True,
+            truncation=False,
+            max_length=1e30
+        )["length"][0]
+        return token_count
+
     def _ingest(
         self,
         texts: list[str],
@@ -88,7 +96,9 @@ class StatuteRAG:
         if ids is None:
             ids = [f"doc_{i}" for i in range(len(texts))]
 
-        self.vectorstore.add_texts(texts, metadatas=metadatas, ids=ids)
+        formatted_texts = [f'{self.PASSAGE_PREFIX} {text}' for text in texts]
+ 
+        self.vectorstore.add_texts(formatted_texts, metadatas=metadatas, ids=ids)
         if verbose:
             print(f"Ingested {len(texts)} documents into ChromaDB.")
 
@@ -104,14 +114,14 @@ class StatuteRAG:
             "section": section,
         }
 
-        # Split long content if needed
-        texts, metadatas = self._split_long_chunks([full_text], [base_meta])
+        texts, metadatas = self._split_long_chunks([full_text], [base_meta], token_padding=self.PASSAGE_TOKEN_PADDING)
 
-        # Generate unique IDs per chunk
         ids = [f"{citation}_chunk{i}" for i in range(len(texts))]
 
         self._ingest(texts, metadatas, ids, verbose=verbose)
 
     def query(self, query_text: str, top_k: int = 3):
-        results = self.vectorstore.similarity_search(query_text, k=top_k)
+        formatted_query_text = f"{self.QUERY_PREFIX} {query_text}"
+        results = self.vectorstore.similarity_search(formatted_query_text, k=top_k)
+
         return [(r.page_content, r.metadata, r.id) for r in results]

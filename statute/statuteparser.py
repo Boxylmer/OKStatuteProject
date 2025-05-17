@@ -22,7 +22,10 @@ class StatuteParser:
             "div", id="oscn-content"
         )  # right now, everything I want is inside this div
         if not isinstance(main_content_div, Tag):
+            print("Parsing failed for HTML: dump below")
+            print(main_content_div)
             raise (ValueError("oscn-content was not found in the html"))
+        
         title, section = StatuteParser._parse_header_data(main_content_div)
 
         raw_texts = StatuteParser._parse_raw_body_data(main_content_div)
