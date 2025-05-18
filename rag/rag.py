@@ -8,7 +8,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from sentence_transformers import CrossEncoder
 from transformers import AutoTokenizer
 
-from rag.utils import ensure_sentencetransformer_model, cosine_similarity
+from rag.utils import ensure_embedding_model, ensure_cross_encoder_model, cosine_similarity
 from statute.statuteparser import StatuteParser
 
 
@@ -25,7 +25,7 @@ class StatuteRAG:
         collection_name="statutes",
         verbose=False,
     ):
-        self.embedding_model_path = ensure_sentencetransformer_model(
+        self.embedding_model_path = ensure_embedding_model(
             embedding_model_name, model_dir
         )
         self.tokenizer = AutoTokenizer.from_pretrained(self.embedding_model_path)
@@ -41,7 +41,7 @@ class StatuteRAG:
             print(f"Embedding model loaded: {embedding_model_name}")
 
         if reranking_model_name:
-            self.reranking_model_path = ensure_sentencetransformer_model(
+            self.reranking_model_path = ensure_cross_encoder_model(
                 reranking_model_name, model_dir
             )
             self.reranking_model = CrossEncoder(
@@ -178,9 +178,7 @@ class StatuteRAG:
             clean_results.append((content, r.metadata, r.id))
 
         if rerank_if_available and self.reranking_model:
-            results = self._rerank(query_text, clean_results)
-        else:
-            results = clean_results
+            return self._rerank(query_text, clean_results, verbose=verbose)
 
         if verbose:
             query_embedding = self.embedding_model.embed_query(query_text)
@@ -188,17 +186,15 @@ class StatuteRAG:
                 cosine_similarity(
                     self.embedding_model.embed_query(res[0]), query_embedding
                 )
-                for res in results
+                for res in clean_results
             ]
             res_scores = [
                 (round(float(score), ndigits=2), result[0][0:10])
-                for result, score in zip(results, scores)
+                for result, score in zip(clean_results, scores)
             ]
-            print(
-                f"RAG results (rerank={rerank_if_available and (self.reranking_model is not None)}): {res_scores}"
-            )
+            print(f"RAG results (no reranking): {res_scores}")
 
-        return results
+        return clean_results
 
     def _rerank(
         self, query: str, results: list[tuple[str, dict, str | None]], verbose=False
@@ -209,7 +205,12 @@ class StatuteRAG:
             show_progress_bar=verbose,
         )
         scored_results = sorted(zip(scores, results), key=lambda x: x[0], reverse=True)
-        # return scored_results # TODO stopped here, need to return scores back to report and debug for verbose=true
-        # TODO Actually, probably just "return" the rerank with verbose=true and let rerank return what it wants, it's the same format anyway
-        return [res for _, res in scored_results]
 
+        if verbose:
+            res_scores = [
+                (round(float(score), ndigits=2), result[0][0:10])
+                for score, result in scored_results
+            ]
+            print(f"RAG results (with reranking): {res_scores}")
+
+        return [res for _, res in scored_results]

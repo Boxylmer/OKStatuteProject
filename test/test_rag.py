@@ -3,9 +3,8 @@ import shutil
 from pathlib import Path
 
 from rag.rag import StatuteRAG
-from rag.utils import ensure_sentencetransformer_model, cosine_similarity
+from rag.utils import ensure_embedding_model, cosine_similarity
 from statute.statuteparser import StatuteParser
-
 
 
 TEST_DATA_DIR = Path("test/test_data")
@@ -29,13 +28,11 @@ class TestStatuteRAG(unittest.TestCase):
 
     def setUp(self):
         self.embedding_model = "sentence-transformers/all-mpnet-base-v2"
-        self.reranking_model = "cross-encoder/ms-marco-MiniLM-L-6-v2" # this thing fails half of the time and makes things worse the other half
+        self.reranking_model = "cross-encoder/ms-marco-MiniLM-L-6-v2"  # this thing fails half of the time and makes things worse the other half
         self.model_dir = Path("data") / "embedding_models"
         self.db_path = Path("data") / "test_chroma_db"
 
-        self.model_path = ensure_sentencetransformer_model(
-            self.embedding_model, self.model_dir
-        )
+        self.model_path = ensure_embedding_model(self.embedding_model, self.model_dir)
 
     def tearDown(self):
         shutil.rmtree(self.db_path, ignore_errors=True)
@@ -118,7 +115,6 @@ class TestStatuteRAG(unittest.TestCase):
             collection_name="test_similarity_indexing",
         )
 
-
         embed_1 = rag.embedding_model.embed_query("posting bond")
         embed_section_h = rag.embedding_model.embed_query("excessive bail")
         # print(cosine_similarity(embed_1, embed_2))
@@ -165,14 +161,18 @@ class TestStatuteRAG(unittest.TestCase):
             self.TEXTS, metadatas=[{"citation": i} for i in range(len(self.TEXTS))]
         )
 
-        query = "What does the law say about the governments ability to censor information?"
+        query = (
+            "What does the law say about the governments ability to censor information?"
+        )
 
-        results_without_reranking = rag.query(query, top_k=5, rerank_if_available=False, verbose=True)
+        results_without_reranking = rag.query(
+            query, top_k=5, rerank_if_available=False, verbose=True
+        )
         results_with_reranking = rag.query(query, top_k=5, verbose=True)
         # print([result[0][0:10] for result in results_without_reranking])
         # print([result[0][0:10] for result in results_with_reranking])
 
         self.assertTrue(
             results_with_reranking[0][0].startswith("Section F"),
-            f"started with: {results_with_reranking[0][0][0:30]}..."
+            f"started with: {results_with_reranking[0][0][0:30]}...",
         )

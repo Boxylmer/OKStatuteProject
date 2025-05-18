@@ -3,9 +3,10 @@ from pathlib import Path
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
+from sentence_transformers import CrossEncoder
 
 
-def ensure_sentencetransformer_model(
+def ensure_embedding_model(
     model_name: str,
     model_dir: str | Path = Path("data") / "embedding_models",
     verbose=False,
@@ -21,6 +22,22 @@ def ensure_sentencetransformer_model(
             print(f"Model {model_name} already present at {model_path}")
     return model_path
 
+
+def ensure_cross_encoder_model(
+    model_name: str,
+    model_dir: Path = Path("data") / "crossencoder_models",
+    verbose=False,
+) -> Path:
+    model_path = model_dir / model_name.replace("/", "_")
+    if not model_path.exists():
+        if verbose:
+            print(f"Downloading CrossEncoder model {model_name} to {model_path}")
+        model = CrossEncoder(model_name)
+        model.save(str(model_path))
+    else:
+        if verbose:
+            print(f"CrossEncoder model already present at {model_path}")
+    return model_path
 
 
 def cosine_similarity(a, b):
