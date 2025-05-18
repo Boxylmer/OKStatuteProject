@@ -3,7 +3,11 @@ import shutil
 from pathlib import Path
 
 from rag.rag import StatuteRAG
-from rag.utils import ensure_embedding_model, cosine_similarity
+from rag.utils import (
+    ensure_embedding_model,
+    ensure_cross_encoder_model,
+    cosine_similarity,
+)
 from statute.statuteparser import StatuteParser
 
 
@@ -28,27 +32,24 @@ class TestStatuteRAG(unittest.TestCase):
 
     def setUp(self):
         self.embedding_model = "sentence-transformers/all-mpnet-base-v2"
-        self.reranking_model = "cross-encoder/ms-marco-MiniLM-L-6-v2"  # this thing fails half of the time and makes things worse the other half
-        self.model_dir = Path("data") / "embedding_models"
+        self.reranking_model = "cross-encoder/ms-marco-MiniLM-L-12-v2"  # this thing fails half of the time and makes things worse the other half
         self.db_path = Path("data") / "test_chroma_db"
 
-        self.model_path = ensure_embedding_model(self.embedding_model, self.model_dir)
+        self.embedding_model_path = ensure_embedding_model(self.embedding_model)
+        self.reranking_model_path = ensure_cross_encoder_model(self.reranking_model)
 
     def tearDown(self):
         shutil.rmtree(self.db_path, ignore_errors=True)
 
     def test_model_downloaded(self):
-        model_path = Path(self.model_dir) / self.embedding_model.replace("/", "_")
         self.assertTrue(
-            model_path.exists() and model_path.is_dir(),
+            self.model_path.exists() and self.model_path.is_dir(),
             "Model path should exist after download.",
         )
 
     def test_ingest_and_query(self):
         rag = StatuteRAG(
             embedding_model_name=self.embedding_model,
-            model_dir=self.model_dir,
-            db_path=False,
             collection_name="test_ingest_and_query",
         )
         rag._ingest(
@@ -81,8 +82,6 @@ class TestStatuteRAG(unittest.TestCase):
     def test_ingest_statute(self):
         rag = StatuteRAG(
             embedding_model_name=self.embedding_model,
-            model_dir=self.model_dir,
-            db_path=False,
             collection_name="test_ingest_statute",
         )
         test_html_paths = [
@@ -110,8 +109,6 @@ class TestStatuteRAG(unittest.TestCase):
     def test_similarity_indexing(self):
         rag = StatuteRAG(
             embedding_model_name=self.embedding_model,
-            model_dir=self.model_dir,
-            db_path=False,
             collection_name="test_similarity_indexing",
         )
 
@@ -153,8 +150,6 @@ class TestStatuteRAG(unittest.TestCase):
         rag = StatuteRAG(
             embedding_model_name=self.embedding_model,
             reranking_model_name=self.reranking_model,
-            model_dir=self.model_dir,
-            db_path=False,
             collection_name="test_ingest_and_query",
         )
         rag._ingest(

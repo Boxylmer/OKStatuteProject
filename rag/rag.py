@@ -8,7 +8,11 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from sentence_transformers import CrossEncoder
 from transformers import AutoTokenizer
 
-from rag.utils import ensure_embedding_model, ensure_cross_encoder_model, cosine_similarity
+from rag.utils import (
+    ensure_embedding_model,
+    ensure_cross_encoder_model,
+    cosine_similarity,
+)
 from statute.statuteparser import StatuteParser
 
 
@@ -21,12 +25,12 @@ class StatuteRAG:
         db_path: Path | None = Path("data") / "rag_db",
         embedding_model_name: str = "sentence-transformers/all-mpnet-base-v2",
         reranking_model_name: str | None = None,
-        model_dir: Path = Path("data") / "sentencetransformer_models",
+        data_dir: Path = Path("data"),
         collection_name="statutes",
         verbose=False,
     ):
         self.embedding_model_path = ensure_embedding_model(
-            embedding_model_name, model_dir
+            embedding_model_name, data_dir
         )
         self.tokenizer = AutoTokenizer.from_pretrained(self.embedding_model_path)
         self.max_tokens = (
@@ -42,7 +46,7 @@ class StatuteRAG:
 
         if reranking_model_name:
             self.reranking_model_path = ensure_cross_encoder_model(
-                reranking_model_name, model_dir
+                reranking_model_name, data_dir
             )
             self.reranking_model = CrossEncoder(
                 model_name_or_path=self.reranking_model_path
