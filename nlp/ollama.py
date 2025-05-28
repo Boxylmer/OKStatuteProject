@@ -2,7 +2,19 @@
 import ollama
 
 
-def generate_stream(instruction, prompt, model="adrienbrault/saul-instruct-v1:Q4_K_M", num_ctx=None, top_k=None, top_p=None, temperature=None, seed=42, verbose=False):
+def generate_stream(
+    instruction,
+    prompt,
+    model="gemma3:4b",
+    num_ctx=None,
+    top_k=None,
+    top_p=None,
+    temperature=None,
+    seed=42,
+    verbose=False,
+):
+    import ollama  # Ensure ollama is imported
+
     options = {}
     if num_ctx is not None:
         options["num_ctx"] = num_ctx
@@ -15,22 +27,28 @@ def generate_stream(instruction, prompt, model="adrienbrault/saul-instruct-v1:Q4
     if seed is not None:
         options["seed"] = seed
 
-    # Use the stream=True generator to yield responses as they come in
+    messages = [
+        {"role": "user", "content": instruction},
+        {"role": "user", "content": prompt},
+    ]
+
     stream = ollama.chat(
         model=model,
-        messages=[{"role": "user", "content": text}],
+        messages=messages,
         options=options,
         stream=True,
     )
 
-    # Yield each streamed chunk of content
     for chunk in stream:
-        text = chunk['message']['content'] 
+        text = chunk["message"]["content"]
         if verbose:
-            print(text, end='')
+            print(chunk)
+            print(text, end="", flush=True)
         yield text
-    
-    print()
+
+    if verbose:
+        print()  # Final newline after stream ends
+
 
 # def generate(text, model="gemma3:12b-it-qat", num_ctx=None, top_k=None, top_p=None, temperature=None, seed=42):
 #     # https://github.com/ollama/ollama/blob/main/docs/modelfile.md#valid-parameters-and-values
