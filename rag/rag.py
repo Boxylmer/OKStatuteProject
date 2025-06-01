@@ -32,14 +32,14 @@ class StatuteRAG:
         self.embedding_model_path = ensure_embedding_model(
             embedding_model_name, data_dir
         )
-        self.tokenizer = AutoTokenizer.from_pretrained(self.embedding_model_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(str(self.embedding_model_path))
         self.max_tokens = (
             self.tokenizer.model_max_length
             if self.tokenizer.model_max_length < 1000000
             else 512
         )
         self.embedding_model = HuggingFaceEmbeddings(
-            model_name=self.embedding_model_path
+            model_name=str(self.embedding_model_path)
         )
         if verbose:
             print(f"Embedding model loaded: {embedding_model_name}")
@@ -125,30 +125,20 @@ class StatuteRAG:
         )["length"][0]
         return token_count
 
-    def _ingest(
-        self,
-        texts: list[str],
-        metadatas: list[dict] | None = None,
-        ids: list[str] | None = None,
-        verbose=False,
-    ):
-        if metadatas is None:
-            metadatas = [{} for _ in texts]
-
-        if ids is None:
-            ids = [f"doc_{i}" for i in range(len(texts))]
-
-        formatted_texts = [f"{self.PASSAGE_PREFIX} {text}" for text in texts]
-
-        self.vectorstore.add_texts(formatted_texts, metadatas=metadatas, ids=ids)
-        if verbose:
-            print(f"Ingested {len(texts)} documents into ChromaDB.")
-
-    def ingest_statute(self, st: StatuteParser, verbose=False):
+    def ingest_statute(self, st: StatuteParser, verbose=False, exist_ok: bool=False):
         citation = st.parse_citation()
         title = st.full_title
         section = st.full_section
         full_text = st.formatted_text()
+
+        existing = self.vectorstore.get(where={"citation": citation})['ids']
+        if existing and not exist_ok:
+            raise ValueError(f"Statute with citation '{citation}' already exists.")
+        elif existing and exist_ok and verbose:
+            print(
+                f"Statute with citation '{citation}' already exists. Skipping ingestion."
+            )
+            return
 
         base_meta = {
             "citation": citation,
@@ -170,6 +160,12 @@ class StatuteRAG:
     def query(
         self, query_text: str, top_k: int = 3, rerank_if_available=True, verbose=False
     ):
+        """
+        Query up to top_k entries from the statute database.
+
+
+        returns a list of results where results are (content, r.metadata, r.id)
+        """
         formatted_query_text = f"{self.QUERY_PREFIX} {query_text}"
         raw_results = self.vectorstore.similarity_search(formatted_query_text, k=top_k)
 
@@ -200,6 +196,27 @@ class StatuteRAG:
 
         return clean_results
 
+
+    def _ingest(
+        self,
+        texts: list[str],
+        metadatas: list[dict] | None = None,
+        ids: list[str] | None = None,
+        verbose=False,
+    ):
+        if metadatas is None:
+            metadatas = [{} for _ in texts]
+
+        if ids is None:
+            ids = [f"doc_{i}" for i in range(len(texts))]
+
+        formatted_texts = [f"{self.PASSAGE_PREFIX} {text}" for text in texts]
+
+        self.vectorstore.add_texts(formatted_texts, metadatas=metadatas, ids=ids)
+        if verbose:
+            print(f"Ingested {len(texts)} documents into ChromaDB for ids {ids}.")
+
+
     def _rerank(
         self, query: str, results: list[tuple[str, dict, str | None]], verbose=False
     ):
@@ -218,3 +235,6 @@ class StatuteRAG:
             print(f"RAG results (with reranking): {res_scores}")
 
         return [res for _, res in scored_results]
+
+    def reset(self):
+        self.vectorstore.reset_collection()

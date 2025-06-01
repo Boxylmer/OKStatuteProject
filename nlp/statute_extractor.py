@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from typing import List, Dict, Union
 from statute.statutecache import StatuteParser
-from nlp.ollama import generate_stream
+from nlp.ollama import OllamaChatStream
 
 
 INSTRUCTION_PARALEGAL = """
@@ -43,21 +43,24 @@ def generate_statute_summary(statute: StatuteParser, model="qwen3:8b", context_l
     """Runs the LLM to extract penalties from a statute."""
     statute_text = "### STATUTE: " + statute.formatted_text()
     prompt = INSTRUCTION_PARALEGAL + "\n" + statute_text
-    response_stream = generate_stream(
+    response_stream = OllamaChatStream(
         prompt,
         model=model,
         num_ctx=context_length,
         top_k=1,
         top_p=1,
         temperature=0,
-        verbose=True
+        verbose=verbose
     )
 
-    response = list(response_stream)
+    response = "".join(response_stream)
+    print(response)
 
-    if response["prompt_eval_count"] + response["eval_count"] > context_length:
-        raise RuntimeError(f"LLM query exceeded allowed context length ({context_length}). prompt: {response["prompt_eval_count"]}, response: {response["eval_count"]}")
-    return response["response"]
+    if response_stream.prompt_eval_count + response_stream.eval_count > context_length:
+        raise RuntimeError(
+            f"LLM query exceeded allowed context length ({context_length}). prompt: {response_stream.prompt_eval_count}, response: {response_stream.eval_count}"
+        )
+    return response
 
 
 def parse_llm_output_to_json(llm_output: str) -> Union[List[Dict[str, str]], List]:

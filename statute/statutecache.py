@@ -104,3 +104,11 @@ class StatuteCache:
                     print(f"Error deleting {citation}: {e}")
 
         return removed
+
+    def __iter__(self):
+        """
+        Iterate over every statute file in self.data_dir,
+        yielding a StatuteParser for each.
+        """
+        for statute_name in self.available_statutes():
+            yield self.get_statute_by_citation(statute_name)
