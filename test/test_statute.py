@@ -50,7 +50,7 @@ class TestStatuteText(unittest.TestCase):
         statute_text = st.as_text()
         statute_list = st.as_list()
         statute_json = st.as_json()
-
+        print(statute_json)
         new_st = StatuteText.from_json(statute_json)
         self.assertEqual(str(new_st.as_list()), str(st.as_list()))
 
@@ -123,7 +123,10 @@ class TestStatuteText(unittest.TestCase):
 
         self.assertEqual(st._get_subsection("foo"), {})
 
-
+    def test_statute_text_walk_sections(self):
+        st = StatuteText(self.TEST_TEXT_1)
+        for section in st.walk_sections(append_parents=True, leaf_only=True):
+            print(section)
 class TestStatuteParser(unittest.TestCase):
     # easy case, 301
     EASY_TL21_ST301 = (

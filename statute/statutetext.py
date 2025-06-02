@@ -45,7 +45,7 @@ class StatuteText:
                 node = {"label": None, "text": line, "subsections": []}
                 root.append(node)
                 continue
-            
+
             node = {"text": line, "subsections": []}
             label_match = re.match(r"^([\w\(\)\.]+)\s+(.*)", line)
 
@@ -89,6 +89,7 @@ class StatuteText:
             label = node.get("label")
             text = node.get("text", "")
             prefix = f"{label}. " if label else ""
+
             line = f"{prefix}{text}".strip()
 
             if pretty:
@@ -139,3 +140,41 @@ class StatuteText:
             return {}
 
         return find(self.structured_data, target)
+
+    def walk_sections(self, append_parents: bool = True, leaf_only: bool = False) -> list[tuple[str, str]]:
+        results = []
+
+        def recurse(node, path_labels, path_texts, inherited_label=None):
+            label = node.get("label")
+            text = node.get("text", "")
+            is_leaf = not node.get("subsections")
+
+            if label is not None:
+                new_path_labels = path_labels + [label]
+                new_path_texts = path_texts + [text]
+                name = ".".join(new_path_labels)
+                full_text = ": ".join(new_path_texts) if append_parents else text
+
+                if not leaf_only or is_leaf:
+                    results.append((name, full_text))
+
+                inherited_label = label  # Update most recent label
+            else:
+                if is_leaf:
+                    inherited_name = ".".join(path_labels)
+                    full_text = ": ".join(path_texts + [text]) if append_parents else text
+                    results.append((inherited_name, full_text))
+
+            children = node.get("subsections", [])
+            for child in children:
+                recurse(
+                    child,
+                    path_labels if label is None else new_path_labels,
+                    path_texts if label is None else new_path_texts,
+                    inherited_label
+                )
+
+        for root in self.structured_data:
+            recurse(root, [], [], None)
+
+        return results
