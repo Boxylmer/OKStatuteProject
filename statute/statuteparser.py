@@ -182,6 +182,9 @@ class StatuteParser:
     def parse_citation(self) -> str:
         return f"{self.parse_title()[0]}.{self.parse_section()[0]}"
 
+    def walk_sections(self, **kwargs) -> list[tuple[str, str]]:
+        return self.statute_text.walk_sections(**kwargs)
+
     @staticmethod
     def get_statute_links(statute_title_url, ignore_repealed=True, verbose=False):
         if verbose:
@@ -210,3 +213,4 @@ class StatuteParser:
             full_url = BASE_URL + "/applications/oscn/" + href
             statute_links.append({"citation": text, "link": full_url})
         return statute_links
+

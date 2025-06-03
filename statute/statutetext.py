@@ -141,7 +141,9 @@ class StatuteText:
 
         return find(self.structured_data, target)
 
-    def walk_sections(self, append_parents: bool = True, leaf_only: bool = False) -> list[tuple[str, str]]:
+    def walk_sections(
+        self, append_parents: bool = True, leaf_only: bool = False
+    ) -> list[tuple[str, str]]:
         results = []
 
         def recurse(node, path_labels, path_texts, inherited_label=None):
@@ -162,7 +164,9 @@ class StatuteText:
             else:
                 if is_leaf:
                     inherited_name = ".".join(path_labels)
-                    full_text = ": ".join(path_texts + [text]) if append_parents else text
+                    full_text = (
+                        " ".join(path_texts + [text]) if append_parents else text
+                    )
                     results.append((inherited_name, full_text))
 
             children = node.get("subsections", [])
@@ -171,7 +175,7 @@ class StatuteText:
                     child,
                     path_labels if label is None else new_path_labels,
                     path_texts if label is None else new_path_texts,
-                    inherited_label
+                    inherited_label,
                 )
 
         for root in self.structured_data:

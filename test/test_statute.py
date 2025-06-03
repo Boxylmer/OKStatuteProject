@@ -43,6 +43,34 @@ class TestStatuteText(unittest.TestCase):
         "D. The Board shall submit an annual statistical report on the incidence of sexual assault forensic evidence collection in this state for which the Board has completed its review during the past calendar year including its recommendations, if any, to medical and law enforcement systems. The Board shall also prepare and make available to the public an annual report containing a summary of the activities of the Board relating to the review of sexual assault forensic evidence collection and an evaluation of whether the state is efficiently discharging its sexual assault forensic evidence collection responsibilities. The report shall be completed no later than February 1 of the subsequent year.",
     ]
 
+    TEST_TEXT_2 = [
+        "Test sentence no header",
+        "A. When a court of competent jurisdiction has entered an order compelling a parent to furnish child support, necessary food, clothing, shelter, medical support, payment of child care expenses, or other remedial care for the minor child of the parent:",
+        "1. Proof that:",
+        "a. the order was made, filed, and served on the parent,",
+        "b. the parent had actual knowledge of the existence of the order,",
+        "c. the order was granted by default after prior due process notice to the parent, or",
+        "d. the parent was present in court at the time the order was pronounced; and",
+        "2. Proof of noncompliance with the order,",
+        "shall be prima facie evidence of an indirect civil contempt of court.",
+        "B. 1. In the case of indirect contempt for the failure to comply with an order for child support, child support arrears, or other support, punishment shall be, at the discretion of the court:",
+        "a. incarceration in the county jail not exceeding six (6) months, or",
+        "b. incarceration in the county jail on weekends or at other times that allow the obligor to be employed, seek employment or engage in other activities ordered by the court.",
+        "2. Punishment may also include imposition of a fine in a sum not exceeding Five Hundred Dollars ($500.00).",
+        "3. In the case of indirect contempt for the failure to comply with an order for child support, child support arrears, or other support, if the court finds by a preponderance of the evidence that the obligor is willfully unemployed, the court may require the obligor to work two (2) eight-hour days per week in a community service program as defined in Section 339.7 of Title 19 of the Oklahoma Statues, if the county commissioners of that county have implemented a community service program.",
+        "C. 1. During proceedings for indirect contempt of court, the court may order the obligor to complete an alternative program and comply with a payment plan for child support and arrears. If the obligor fails to complete the alternative program and comply with the payment plan, the court shall proceed with the indirect contempt and shall impose punishment pursuant to subsection B of this section.",
+        "2. An alternative program may include:",
+        "a. a problem-solving court program for obligors when child support services under the state child support plan as provided in Section 237 of Title 56 of the Oklahoma Statutes are being provided for the benefit of the child. A problem-solving court program is an immediate and highly structured judicial intervention process for the obligor and requires completion of a participation agreement by the obligor and monitoring by the court. A problem-solving court program differs in practice and design from the traditional adversarial contempt prosecution and trial systems. The problem-solving court program uses a team approach administered by the judge in cooperation with a child support state\u0092s attorney and a child support court liaison who focuses on removing the obstacles causing the nonpayment of the obligor. The obligors in this program shall be required to sign an agreement to participate in this program as a condition of the Department of Human Services agreement to stay contempt proceedings or in lieu of incarceration after a finding of guilt. The court liaisons assess the needs of the obligor, develop a community referral network, make referrals, monitor the compliance of the obligor in the program, and provide status reports to the court, and",
+        "b. participation in programs such as counseling, treatment, educational training, social skills training or employment training to which the obligor reports daily or on a regular basis at specified times for a specified length of time.",
+        "D. In the case of indirect contempt for the failure to comply with an order for child support, child support arrears, or other support, the Supreme Court shall promulgate guidelines for determination of the sentence and purge fee. If the court fails to follow the guidelines, the court shall make a specific finding stating the reasons why the imposition of the guidelines would result in inequity. The factors that shall be used in determining the sentence and purge fee are:",
+        "1. The proportion of the child support, child support arrearage payments, or other support that was unpaid in relation to the amount of support that was ordered paid;",
+        "2. The proportion of the child support, child support arrearage payments, or other support that could have been paid by the party found in contempt in relation to the amount of support that was ordered paid;",
+        "3. The present capacity of the party found in contempt to pay any arrearages;",
+        "4. Any willful actions taken by the party found in contempt to reduce the capacity of that party to pay any arrearages;",
+        "5. The past history of compliance or noncompliance with the support order; and",
+        "6. Willful acts to avoid the jurisd`iction of the court."
+    ]
+
     def test_statute_text_conversion(self):
         st = StatuteText(self.TEST_TEXT_1)
         st.as_list()
@@ -125,8 +153,20 @@ class TestStatuteText(unittest.TestCase):
 
     def test_statute_text_walk_sections(self):
         st = StatuteText(self.TEST_TEXT_1)
-        for section in st.walk_sections(append_parents=True, leaf_only=True):
-            print(section)
+        all_sections = list(st.walk_sections(append_parents=True, leaf_only=False))
+        leaf_sections = list(st.walk_sections(append_parents=True, leaf_only=True))
+        minimal_sections = list(st.walk_sections(append_parents=False, leaf_only=False))
+        self.assertEqual(len(all_sections), len(minimal_sections))
+        self.assertGreater(len(all_sections), len(leaf_sections))
+
+        # [print(s) for s in all_sections]
+        # print()
+        # [print(s) for s in leaf_sections]
+        # print()
+        # [print(s) for s in minimal_sections]
+
+        [print(s) for s in StatuteText(self.TEST_TEXT_2).walk_sections(append_parents=True, leaf_only=True)]
+
 class TestStatuteParser(unittest.TestCase):
     # easy case, 301
     EASY_TL21_ST301 = (
