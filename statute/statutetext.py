@@ -24,6 +24,36 @@ class StatuteText:
         """
         self.structured_data = self._parse(raw_texts)
 
+    def _extract_labeled_parts(self, line: str) -> list[tuple[str | None, str]]:
+        """
+        From a single line, extract a sequence of (label, content) pairs.
+        e.g. 'B. (a) The word means ...' -> [('B', ''), ('a', 'The word means ...')]
+        If no label is detected, return [(None, line)]
+        """
+        tokens: list[tuple[str | None, str]] = []
+        remaining = line.strip()
+
+        while remaining:
+            matched = False
+            for pattern, _ in self.SECTION_PATTERNS:
+                match = re.match(pattern, remaining)
+                if match:
+                    raw_label = match.group()
+                    label = self._clean_label(raw_label)
+                    remaining = remaining[len(raw_label):].lstrip()
+                    tokens.append((label, ""))  # We'll fill text later
+                    matched = True
+                    break
+
+            if not matched:
+                if tokens:
+                    tokens[-1] = (tokens[-1][0], remaining)
+                else:
+                    tokens.append((None, remaining))
+                break
+
+        return tokens
+
     def _get_section_level(self, text: str) -> int:
         for pattern, level in self.SECTION_PATTERNS:
             if re.match(pattern, text.strip()):
@@ -32,39 +62,44 @@ class StatuteText:
 
     def _clean_label(self, label: str) -> str:
         return re.sub(r"[().]", "", label).rstrip(".")
-
+        
     def _parse(self, raw_texts) -> list[dict]:
         root = []
         stack: deque[tuple[Any, int]] = deque()
 
         for line in raw_texts:
             line = line.strip()
-            level = self._get_section_level(line)
-
-            if level == 0:
-                node = {"label": None, "text": line, "subsections": []}
-                root.append(node)
+            if not line:
                 continue
 
-            node = {"text": line, "subsections": []}
-            label_match = re.match(r"^([\w\(\)\.]+)\s+(.*)", line)
+            tokens = self._extract_labeled_parts(line)
 
-            if label_match:
-                raw_label, content = label_match.groups()
-                node["label"] = self._clean_label(raw_label)
-                node["text"] = content
-            else:
-                node["label"] = None
+            current_parent = None  # Will store the last added node (for chaining children)
+            for label, text in tokens:
+                if label is None:
+                    node = {"label": None, "text": text, "subsections": []}
+                    if current_parent:
+                        current_parent["subsections"].append(node)
+                    else:
+                        root.append(node)
+                    continue
 
-            while stack and stack[-1][1] >= level:
-                stack.pop()
+                level = self._get_section_level(label + ".")
 
-            if stack:
-                stack[-1][0]["subsections"].append(node)
-            else:
-                root.append(node)
+                node = {"label": label, "text": text, "subsections": []}
 
-            stack.append((node, level))
+                # While stack is deeper or same level, pop it
+                while stack and stack[-1][1] >= level:
+                    stack.pop()
+
+                # Push this as a child of stack top (or root)
+                if stack:
+                    stack[-1][0]["subsections"].append(node)
+                else:
+                    root.append(node)
+
+                stack.append((node, level))
+                current_parent = node  # so nested labels on same line chain down correctly
 
         return root
 

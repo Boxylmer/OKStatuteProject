@@ -68,7 +68,21 @@ class TestStatuteText(unittest.TestCase):
         "3. The present capacity of the party found in contempt to pay any arrearages;",
         "4. Any willful actions taken by the party found in contempt to reduce the capacity of that party to pay any arrearages;",
         "5. The past history of compliance or noncompliance with the support order; and",
-        "6. Willful acts to avoid the jurisd`iction of the court."
+        "6. Willful acts to avoid the jurisd`iction of the court.",
+    ]
+
+    TEST_TEXT_3 = [
+        "A. Any person who, with intent to deprive or withhold from the owner thereof the control of a trade secret, or with an intent to appropriate a trade secret to his or her own use or to the use of another:",
+        "(a) steals or embezzles an article representing a trade secret, or,",
+        "(b) without authority makes or causes to be made a copy of an article representing a trade secret,",
+        "shall be guilty of larceny under Section 1704 of this title. For purposes of determining whether such larceny is grand larceny or petit larceny under this section, the value of the trade secret and not the value of the article shall be controlling.",
+        'B. (a) The word "article" means any object, material, device, customer list, business records, or substance or copy thereof, including any writing, record, recording, drawing, sample, specimen, prototype, model, photograph, microorganism, blueprint, information stored in any computer-related format, or map.',
+        '(b) The word "representing" means describing, depleting, containing, constituting, reflecting or recording.',
+        '(c) The term "trade secret" means information, including a formula, pattern, compilation, program, device, method, technique, customer list, business records or process, that:',
+        "1. derives independent economic value, actual or potential, from not being generally known to, and not being readily ascertainable by proper means by, other persons who can obtain economic value from its disclosure or use; and",
+        "2. is the subject of efforts that are reasonable under the circumstances to maintain its secrecy.",
+        '(d) The word "copy" means any facsimile, replica, photograph or other reproduction of an article, including copying, transferring and e-mailing of computer data, and any note, drawing or sketch made of or from an article.',
+        "C. In a prosecution for a violation of this act, it shall be no defense that the person so charged returned or intended to return the article so stolen, embezzled or copied. D. The provisions of this section shall not apply if the person acted in accordance with a written agreement with the person\u0092s employer that specified the manner in which disputes involving clients are to be resolved upon termination of the employer-employee relationship.",
     ]
 
     def test_statute_text_conversion(self):
@@ -78,7 +92,6 @@ class TestStatuteText(unittest.TestCase):
         statute_text = st.as_text()
         statute_list = st.as_list()
         statute_json = st.as_json()
-        print(statute_json)
         new_st = StatuteText.from_json(statute_json)
         self.assertEqual(str(new_st.as_list()), str(st.as_list()))
 
@@ -151,6 +164,12 @@ class TestStatuteText(unittest.TestCase):
 
         self.assertEqual(st._get_subsection("foo"), {})
 
+    def test_statute_text_same_line_section_markers(self):
+        st = StatuteText(self.TEST_TEXT_3)
+        print(st.subsection_names())
+        self.assertEqual(st.subsection_names(), ['A', 'A.a', 'A.b', 'B', 'B.a', 'B.b', 'B.c', 'B.c.1', 'B.c.2', 'B.d', 'C'])
+
+
     def test_statute_text_walk_sections(self):
         st = StatuteText(self.TEST_TEXT_1)
         all_sections = list(st.walk_sections(append_parents=True, leaf_only=False))
@@ -165,7 +184,13 @@ class TestStatuteText(unittest.TestCase):
         # print()
         # [print(s) for s in minimal_sections]
 
-        [print(s) for s in StatuteText(self.TEST_TEXT_2).walk_sections(append_parents=True, leaf_only=True)]
+        [
+            print(s)
+            for s in StatuteText(self.TEST_TEXT_2).walk_sections(
+                append_parents=True, leaf_only=True
+            )
+        ]
+
 
 class TestStatuteParser(unittest.TestCase):
     # easy case, 301
@@ -265,13 +290,15 @@ class TestStatuteParser(unittest.TestCase):
         self.assertEqual(st.parse_title()[0], "27A")
         self.assertEqual(st.parse_section()[0], "1-1-203")
         self.assertEqual(st.parse_citation(), "27A.1-1-203")
-        
+
     def test_link_retrieval(self):
         links = StatuteParser.get_statute_links(STATUTE_21_URL)
-        links_with_repealed =  StatuteParser.get_statute_links(STATUTE_21_URL, ignore_repealed=False)
+        links_with_repealed = StatuteParser.get_statute_links(
+            STATUTE_21_URL, ignore_repealed=False
+        )
         self.assertGreater(len(links), 2)
         self.assertGreater(len(links_with_repealed), len(links))
-        
+
 
 class TestStatuteCache(unittest.TestCase):
     # 484.1 contains sections that should be cut off (Historical Data Laws 2009 instead of historical data)
@@ -346,5 +373,6 @@ class TestStatuteCache(unittest.TestCase):
         self.assertIn(citation, self.cache.citations)
         self.assertIn(citation, self.cache.cache_dates)
         self.assertIn(self.CONTAINS_HIST_TL21_ST401, self.cache.cached_links)
-        self.assertEqual(self.cache.cached_links[self.CONTAINS_HIST_TL21_ST401], citation)
-
+        self.assertEqual(
+            self.cache.cached_links[self.CONTAINS_HIST_TL21_ST401], citation
+        )
