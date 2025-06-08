@@ -10,8 +10,81 @@ import unittest
 from statute.statutetext import StatuteText
 from statute.statute import Statute
 from statute.statutecache import StatuteCache
+from statute.statutenode import StatuteNode
 
 STATUTE_21_URL = "https://www.oscn.net/applications/oscn/index.asp?ftdb=STOKST21"
+
+
+class TestStatuteNode(unittest.TestCase):
+    def test_basic_initialization(self):
+        node = StatuteNode(text="The root section", label="A")
+        self.assertEqual(node.label, "A")
+        self.assertEqual(node.text, "The root section")
+        self.assertEqual(node.subsections, [])
+
+    def test_add_subsection_and_dict_roundtrip(self):
+        parent = StatuteNode(text="Parent", label="A")
+        child = StatuteNode(text="Child", label="1")
+        parent.add_subsection(child)
+
+        data = parent.as_dict()
+        reconstructed = StatuteNode.from_dict(data)
+
+        self.assertEqual(reconstructed.label, "A")
+        self.assertEqual(reconstructed.text, "Parent")
+        self.assertEqual(len(reconstructed.subsections), 1)
+        self.assertEqual(reconstructed.subsections[0].label, "1")
+        self.assertEqual(reconstructed.subsections[0].text, "Child")
+
+    def test_walk_sections_full_path(self):
+        root = StatuteNode(text="Root", label="A")
+        root.add_subsection(StatuteNode(text="First child", label="1"))
+        root.add_subsection(StatuteNode(text="Second child", label="2"))
+
+        leaves = root.walk(append_parents=True, leaf_only=True)
+        self.assertEqual(
+            leaves,
+            [
+                ("A.1", "Root: First child"),
+                ("A.2", "Root: Second child"),
+            ],
+        )
+
+    def test_unlabeled_node_walk_and_serialization(self):
+        unlabeled = StatuteNode(text="This is a comment not tied to a section")
+        parent = StatuteNode(text="Main text", label="B")
+        parent.add_subsection(unlabeled)
+
+        leaves = parent.walk(append_parents=True, leaf_only=True)
+        self.assertEqual(
+            leaves,
+            [
+                ("B", "Main text: This is a comment not tied to a section"),
+            ],
+        )
+
+        roundtrip = StatuteNode.from_dict(parent.as_dict())
+        self.assertEqual(roundtrip.subsections[0].label, None)
+        self.assertEqual(
+            roundtrip.subsections[0].text, "This is a comment not tied to a section"
+        )
+
+    def test_leaf_only_false_walk(self):
+        root = StatuteNode(text="Top", label="A")
+        mid = StatuteNode(text="Middle", label="1")
+        leaf = StatuteNode(text="Leaf", label="a")
+        mid.add_subsection(leaf)
+        root.add_subsection(mid)
+
+        all_nodes = root.walk(append_parents=False, leaf_only=False)
+        self.assertEqual(
+            all_nodes,
+            [
+                ("A", "Top"),
+                ("A.1", "Middle"),
+                ("A.1.a", "Leaf"),
+            ],
+        )
 
 
 class TestStatuteText(unittest.TestCase):
@@ -167,8 +240,10 @@ class TestStatuteText(unittest.TestCase):
     def test_statute_text_same_line_section_markers(self):
         st = StatuteText(self.TEST_TEXT_3)
         print(st.subsection_names())
-        self.assertEqual(st.subsection_names(), ['A', 'A.a', 'A.b', 'B', 'B.a', 'B.b', 'B.c', 'B.c.1', 'B.c.2', 'B.d', 'C'])
-
+        self.assertEqual(
+            st.subsection_names(),
+            ["A", "A.a", "A.b", "B", "B.a", "B.b", "B.c", "B.c.1", "B.c.2", "B.d", "C"],
+        )
 
     def test_statute_text_walk_sections(self):
         st = StatuteText(self.TEST_TEXT_1)
