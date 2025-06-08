@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from statute.statuteparser import StatuteParser
+from statute.statute import Statute
 from statute.statutecache import StatuteCache
 
 
@@ -9,7 +9,9 @@ CACHE_PATH = Path("data") / "statute_cache"
 
 cache = StatuteCache(CACHE_PATH)
 print("Cache created")
-title_21_links = [st["link"] for st in StatuteParser.get_statute_links(STATUTE_21_URL, verbose=True)]
+title_21_links = [
+    st["link"] for st in Statute.get_statute_links(STATUTE_21_URL, verbose=True)
+]
 print("Statute URL queue created")
 for link in title_21_links:
     parser = cache.get_statute(link)

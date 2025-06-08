@@ -8,7 +8,7 @@ from rag.utils import (
     ensure_cross_encoder_model,
     cosine_similarity,
 )
-from statute.statuteparser import StatuteParser
+from statute.statute import Statute
 
 
 TEST_DATA_DIR = Path("test/test_data")
@@ -103,7 +103,7 @@ class TestStatuteRAG(unittest.TestCase):
         for path in test_html_paths:
             with open(path, "r", encoding="utf-8") as f:
                 html = f.read()
-                example_parser = StatuteParser.from_html(html)
+                example_parser = Statute.from_html(html)
                 self.statute_rag.ingest_statute(example_parser)
 
         duplicate_statute_path = test_html_paths[0]
@@ -111,12 +111,10 @@ class TestStatuteRAG(unittest.TestCase):
             # should raise
             with self.assertRaises(ValueError):
                 html = f.read()
-                self.statute_rag.ingest_statute(StatuteParser.from_html(html))
+                self.statute_rag.ingest_statute(Statute.from_html(html))
 
             # should not raise with exist_ok
-            self.statute_rag.ingest_statute(
-                StatuteParser.from_html(html), exist_ok=True
-            )
+            self.statute_rag.ingest_statute(Statute.from_html(html), exist_ok=True)
 
         query = "What happens if I prevent a group of people from gathering together?"
         results = self.statute_rag.query(query, top_k=1)

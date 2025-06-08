@@ -2,7 +2,7 @@ import os
 import json
 from datetime import datetime
 from pathlib import Path
-from statute.statuteparser import StatuteParser
+from statute.statute import Statute
 from typing import Any
 
 
@@ -35,12 +35,12 @@ class StatuteCache:
             except Exception as e:
                 print(f"Warning: Skipping corrupt cache file {filename}: {e}")
 
-    def get_statute(self, statute_link: str, force: bool = False) -> StatuteParser:
+    def get_statute(self, statute_link: str, force: bool = False) -> Statute:
         citation = self.cached_links.get(statute_link)
         if citation and not force:
             return self.get_statute_by_citation(citation)
 
-        parser = StatuteParser.from_oscn(statute_link)
+        parser = Statute.from_oscn(statute_link)
 
         citation = parser.parse_citation()
 
@@ -63,7 +63,7 @@ class StatuteCache:
 
         return parser
 
-    def get_statute_by_citation(self, citation: str) -> StatuteParser:
+    def get_statute_by_citation(self, citation: str) -> Statute:
         path = self._cache_path(citation)
         if not path.exists():
             raise FileNotFoundError(f"Statute {citation} not cached.")
@@ -73,7 +73,7 @@ class StatuteCache:
             full_title = data["full_title"]
             full_section = data["full_section"]
 
-        return StatuteParser(
+        return Statute(
             full_title=full_title,
             full_section=full_section,
             raw_texts=data["raw_texts"],

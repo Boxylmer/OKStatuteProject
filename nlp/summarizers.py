@@ -1,4 +1,4 @@
-from statute.statuteparser import StatuteParser
+from statute.statute import Statute
 
 from nlp.ollama import OllamaChatStream
 
@@ -28,7 +28,7 @@ class StatuteSummarizer:
 
     def summarize(
         self,
-        statute: StatuteParser,
+        statute: Statute,
         context: str | None = None,
         verbose=False,  # optional: timeout_seconds ? TODO
     ) -> str:
@@ -63,7 +63,10 @@ class StatuteSummarizer:
         response = "".join(response_stream)
         print(response)
 
-        if response_stream.prompt_eval_count + response_stream.eval_count > self.context_length:
+        if (
+            response_stream.prompt_eval_count + response_stream.eval_count
+            > self.context_length
+        ):
             raise RuntimeError(
                 f"LLM query exceeded allowed context length ({self.context_length}). prompt: {response_stream.prompt_eval_count}, response: {response_stream.eval_count}"
             )

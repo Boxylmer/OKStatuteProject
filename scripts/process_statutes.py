@@ -3,7 +3,7 @@ from pathlib import Path
 import json
 import re
 
-from statute.statuteparser import StatuteParser
+from statute.statute import Statute
 from statute.statutecache import StatuteCache
 from nlp.statute_extractor import extract_statute
 
@@ -17,12 +17,12 @@ queued_statutes = []
 for i, statute_name in enumerate(cache.available_statutes()):
     st = cache.get_statute_by_citation(statute_name)
     if bool(re.fullmatch(r"20[a-zA-Z]", st.parse_section()[0])):
-        print("Skipping: ", st.parse_section()[0]) 
+        print("Skipping: ", st.parse_section()[0])
         continue
     st_text = st.formatted_text()
     le = len(st_text)
-    lengths.append(le) 
-    if le == 12353: # long one
+    lengths.append(le)
+    if le == 12353:  # long one
         print(cache.get_statute_by_citation(statute_name).subsection_names())
         print(cache.get_statute_by_citation(statute_name).formatted_text())
         print(i)
@@ -30,10 +30,10 @@ for i, statute_name in enumerate(cache.available_statutes()):
     queued_statutes.append(statute_name)
 
 
-def process_statute(output_folder: Path, citation: str, statute: StatuteParser, model: str):
+def process_statute(output_folder: Path, citation: str, statute: Statute, model: str):
     output_folder.mkdir(parents=True, exist_ok=True)
     out_path = output_folder / f"{citation}.json"
-    
+
     if out_path.exists():
         print("Skipping: ", citation)
         return
@@ -50,6 +50,11 @@ def process_statute(output_folder: Path, citation: str, statute: StatuteParser, 
 for statute_name in queued_statutes:
     try:
         statute = cache.get_statute_by_citation(statute_name)
-        process_statute(OUTPUT_FOLDER, statute_name, statute, model="adrienbrault/saul-instruct-v1:Q4_K_M")
+        process_statute(
+            OUTPUT_FOLDER,
+            statute_name,
+            statute,
+            model="adrienbrault/saul-instruct-v1:Q4_K_M",
+        )
     except Exception as e:
         print("Could not process", statute_name)

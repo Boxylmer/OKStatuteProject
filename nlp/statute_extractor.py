@@ -2,7 +2,7 @@ import re
 import json
 from pathlib import Path
 from typing import List, Dict, Union
-from statute.statutecache import StatuteParser
+from statute.statutecache import Statute
 from nlp.ollama import OllamaChatStream
 
 
@@ -34,12 +34,15 @@ IF NOTHING IS EXTRACTABLE: Return an empty list -> []
 """
 
 
-def extract_statute(statute: StatuteParser, model="qwen3:8b", context_length=16384):
+def extract_statute(statute: Statute, model="qwen3:8b", context_length=16384):
     parsed = generate_statute_summary(statute, model, context_length)
     json = parse_llm_output_to_json(parsed)
     return json
 
-def generate_statute_summary(statute: StatuteParser, model="qwen3:8b", context_length=16384, verbose=False) -> str:
+
+def generate_statute_summary(
+    statute: Statute, model="qwen3:8b", context_length=16384, verbose=False
+) -> str:
     """Runs the LLM to extract penalties from a statute."""
     statute_text = "### STATUTE: " + statute.formatted_text()
     prompt = INSTRUCTION_PARALEGAL + "\n" + statute_text
@@ -50,7 +53,7 @@ def generate_statute_summary(statute: StatuteParser, model="qwen3:8b", context_l
         top_k=1,
         top_p=1,
         temperature=0,
-        verbose=verbose
+        verbose=verbose,
     )
 
     response = "".join(response_stream)
@@ -65,21 +68,23 @@ def generate_statute_summary(statute: StatuteParser, model="qwen3:8b", context_l
 
 def parse_llm_output_to_json(llm_output: str) -> Union[List[Dict[str, str]], List]:
     """Attempts to clean LLM output into JSON. Returns an empty list if parsing fails."""
-    cleaned = re.sub(r'<think>.*?</think>', '', llm_output, flags=re.DOTALL).strip()
+    cleaned = re.sub(r"<think>.*?</think>", "", llm_output, flags=re.DOTALL).strip()
     try:
         parsed = json.loads(cleaned)
         if isinstance(parsed, list):
             return parsed
         else:
             return []
-        
+
     except json.JSONDecodeError:
         print("WARNING: JSON DECODE FAILED. RAW DATA BELOW")
         print(cleaned)
         return []
 
 
-def write_statute_json(output_folder: Path, citation: str, json_data: Union[List, Dict]):
+def write_statute_json(
+    output_folder: Path, citation: str, json_data: Union[List, Dict]
+):
     """Writes the JSON data to disk under a consistent filename."""
     output_folder.mkdir(parents=True, exist_ok=True)
     out_path = output_folder / f"{citation}.json"

@@ -8,7 +8,7 @@ import unittest
 
 # statutetext
 from statute.statutetext import StatuteText
-from statute.statuteparser import StatuteParser
+from statute.statute import Statute
 from statute.statutecache import StatuteCache
 
 STATUTE_21_URL = "https://www.oscn.net/applications/oscn/index.asp?ftdb=STOKST21"
@@ -192,7 +192,7 @@ class TestStatuteText(unittest.TestCase):
         ]
 
 
-class TestStatuteParser(unittest.TestCase):
+class TestStatute(unittest.TestCase):
     # easy case, 301
     EASY_TL21_ST301 = (
         "https://www.oscn.net/applications/oscn/DeliverDocument.asp?CiteID=69082"
@@ -244,7 +244,7 @@ class TestStatuteParser(unittest.TestCase):
     )
 
     def test_from_oscn(self):
-        st = StatuteParser.from_oscn(self.EASY_TL21_ST301)
+        st = Statute.from_oscn(self.EASY_TL21_ST301)
         self.assertEqual(st.full_title, "Title 21. Crimes and Punishments")
         self.assertEqual(
             st.full_section,
@@ -252,7 +252,7 @@ class TestStatuteParser(unittest.TestCase):
         )
 
     def test_special_cases(self):
-        st = StatuteParser.from_oscn(self.EASY_TL21_ST301)
+        st = Statute.from_oscn(self.EASY_TL21_ST301)
         self.assertEqual(st.subsection_names(), [])
         self.assertEqual(st.parse_title()[0], "21")
         self.assertEqual(st.parse_title()[1], "Crimes and Punishments")
@@ -261,39 +261,39 @@ class TestStatuteParser(unittest.TestCase):
             st.parse_section()[1], "Prevention of Legislative Meetings - Penalty"
         )
 
-        st = StatuteParser.from_oscn(self.NESTED_TL_ST143)
+        st = Statute.from_oscn(self.NESTED_TL_ST143)
         self.assertEqual(st.subsection_names()[2], "A.2")
 
-        st = StatuteParser.from_oscn(self.HISTORICAL_TL21_ST355)
+        st = Statute.from_oscn(self.HISTORICAL_TL21_ST355)
         self.assertEqual(st.subsection_names(), ["A", "B", "C"])
 
-        st = StatuteParser.from_oscn(self.HISTORICAL_TL21_ST385)
+        st = Statute.from_oscn(self.HISTORICAL_TL21_ST385)
         self.assertEqual(st.subsection_names(), ["1", "2"])
 
-        st = StatuteParser.from_oscn(self.LITERAL_TL21_ST_405)
+        st = Statute.from_oscn(self.LITERAL_TL21_ST_405)
         self.assertEqual(st.subsection_names(), ["First", "Second", "Third", "Fourth"])
 
-        st = StatuteParser.from_oscn(self.WEIRD_CHARACTERS_TL21_ST465)
+        st = Statute.from_oscn(self.WEIRD_CHARACTERS_TL21_ST465)
         self.assertNotIn("\xa0", st.text())
 
-        st = StatuteParser.from_oscn(self.CONTAINS_HIST_TL21_ST401)
+        st = Statute.from_oscn(self.CONTAINS_HIST_TL21_ST401)
         self.assertNotIn("Historical Data", st.text())
         self.assertEqual(st.parse_section()[0], "484.1")
 
-        st = StatuteParser.from_oscn(self.UNUSUAL_NUMBERING_TL21_ST499)
+        st = Statute.from_oscn(self.UNUSUAL_NUMBERING_TL21_ST499)
         self.assertEqual(st.subsection_names(), ["a", "b", "c"])
 
-        st = StatuteParser.from_oscn(self.DASHED_NAME_TL29_ST2_101)
+        st = Statute.from_oscn(self.DASHED_NAME_TL29_ST2_101)
         self.assertEqual(st.parse_section()[0], "2-101")
 
-        st = StatuteParser.from_oscn(self.WEIRD_TITLE_AND_SECTION_TL27A_ST_1_1_203)
+        st = Statute.from_oscn(self.WEIRD_TITLE_AND_SECTION_TL27A_ST_1_1_203)
         self.assertEqual(st.parse_title()[0], "27A")
         self.assertEqual(st.parse_section()[0], "1-1-203")
         self.assertEqual(st.parse_citation(), "27A.1-1-203")
 
     def test_link_retrieval(self):
-        links = StatuteParser.get_statute_links(STATUTE_21_URL)
-        links_with_repealed = StatuteParser.get_statute_links(
+        links = Statute.get_statute_links(STATUTE_21_URL)
+        links_with_repealed = Statute.get_statute_links(
             STATUTE_21_URL, ignore_repealed=False
         )
         self.assertGreater(len(links), 2)

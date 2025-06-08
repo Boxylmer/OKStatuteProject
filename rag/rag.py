@@ -13,7 +13,7 @@ from rag.utils import (
     ensure_cross_encoder_model,
     cosine_similarity,
 )
-from statute.statuteparser import StatuteParser
+from statute.statute import Statute
 
 
 class StatuteRAG:
@@ -125,13 +125,13 @@ class StatuteRAG:
         )["length"][0]
         return token_count
 
-    def ingest_statute(self, st: StatuteParser, verbose=False, exist_ok: bool=False):
+    def ingest_statute(self, st: Statute, verbose=False, exist_ok: bool = False):
         citation = st.parse_citation()
         title = st.full_title
         section = st.full_section
         full_text = st.formatted_text()
 
-        existing = self.vectorstore.get(where={"citation": citation})['ids']
+        existing = self.vectorstore.get(where={"citation": citation})["ids"]
         if existing and not exist_ok:
             raise ValueError(f"Statute with citation '{citation}' already exists.")
         elif existing and exist_ok and verbose:
@@ -196,7 +196,6 @@ class StatuteRAG:
 
         return clean_results
 
-
     def _ingest(
         self,
         texts: list[str],
@@ -215,7 +214,6 @@ class StatuteRAG:
         self.vectorstore.add_texts(formatted_texts, metadatas=metadatas, ids=ids)
         if verbose:
             print(f"Ingested {len(texts)} documents into ChromaDB for ids {ids}.")
-
 
     def _rerank(
         self, query: str, results: list[tuple[str, dict, str | None]], verbose=False
