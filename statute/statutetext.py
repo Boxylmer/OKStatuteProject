@@ -1,7 +1,7 @@
 from collections import deque
 import json
 import re
-from typing import Any
+from typing import Any, Optional
 
 
 class StatuteText:
@@ -74,7 +74,7 @@ class StatuteText:
 
             tokens = self._extract_labeled_parts(line)
 
-            current_parent = None  # Will store the last added node (for chaining children)
+            current_parent  = None  # Will store the last added node (for chaining children)
             for label, text in tokens:
                 if label is None:
                     node = {"label": None, "text": text, "subsections": []}
