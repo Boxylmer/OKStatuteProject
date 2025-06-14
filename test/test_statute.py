@@ -11,6 +11,8 @@ from statute.statutetext import StatuteText
 from statute.statute import Statute
 from statute.statutecache import StatuteCache
 from statute.statutenode import StatuteNode
+from statute.statutetree import StatuteTree
+
 
 STATUTE_21_URL = "https://www.oscn.net/applications/oscn/index.asp?ftdb=STOKST21"
 
@@ -85,6 +87,114 @@ class TestStatuteNode(unittest.TestCase):
                 ("A.1.a", "Leaf"),
             ],
         )
+
+
+class TestStatuteTree(unittest.TestCase):
+    def test_basic_upper_and_numbered(self):
+        lines = [
+            "A. Main section",
+            "1. Subsection one",
+            "2. Subsection two",
+            "B. Another section"
+        ]
+        tree = StatuteTree(lines)
+        result = tree.walk(append_parents=True, leaf_only=True)
+        self.assertEqual(result, [
+            ("A.1", "Main section: Subsection one"),
+            ("A.2", "Main section: Subsection two"),
+            ("B", "Another section"),
+        ])
+
+    def test_mixed_patterns(self):
+        lines = [
+            "(A) Alpha",
+            "(1) Alpha-1",
+            "(a) Alpha-1-a",
+            "(2) Alpha-2"
+        ]
+        tree = StatuteTree(lines)
+        result = tree.walk(append_parents=True, leaf_only=True)
+        self.assertEqual(result, [
+            ("(A)(1)(a)", "Alpha: Alpha-1: Alpha-1-a"),
+            ("(A)(2)", "Alpha: Alpha-2")
+        ])
+
+    def test_unlabeled_lines(self):
+        lines = [
+            "A. Main text",
+            "This is a continuation.",
+            "1. First item",
+            "Some comment.",
+            "2. Second item"
+        ]
+        tree = StatuteTree(lines)
+        result = tree.walk(append_parents=True, leaf_only=False)
+        self.assertTrue(any("continuation" in text for _, text in result))
+        self.assertTrue(any("comment" in text for _, text in result))
+
+    def test_invalid_labels_fallback(self):
+        lines = [
+            "X. Invalid label should fall back",
+            "1. Valid under X",
+            "Z. Another invalid label"
+        ]
+        tree = StatuteTree(lines)
+        result = tree.walk(append_parents=True, leaf_only=True)
+        self.assertTrue(any("Invalid label" in text for _, text in result))
+        self.assertTrue(any("Another invalid" in text for _, text in result))
+
+
+    def test_normalized_paren_labels(self):
+        lines = ["(A) Alpha", "(1) Alpha-1", "(a) Alpha-1-a", "(B) Beta"]
+        tree = StatuteTree(lines)
+        result = dict(tree.walk())
+
+        self.assertIn("A.1.a", result)
+        self.assertEqual(result["A.1.a"], "Root: Alpha: Alpha-1: Alpha-1-a")
+
+        self.assertIn("B", result)
+        self.assertEqual(result["B"], "Root: Beta")
+
+    def test_dot_labels_and_structure(self):
+        lines = ["A. Alpha", "1. Alpha-1", "a. Alpha-1-a", "B. Beta"]
+        tree = StatuteTree(lines)
+        result = tree.walk()
+        self.assertEqual(result[0][0], "A.1.a")
+        self.assertEqual(result[0][1], "Root: Alpha: Alpha-1: Alpha-1-a")
+        self.assertEqual(result[1][0], "B")
+        self.assertEqual(result[1][1], "Root: Beta")
+
+    def test_mixed_and_continuation(self):
+        lines = ["A. Alpha", "(1) Alpha-1", "Continued explanation.", "(2) Alpha-2"]
+        tree = StatuteTree(lines)
+        result = tree.walk()
+        self.assertEqual(result[0][0], "A.1")
+        self.assertIn("Continued explanation", result[0][1])
+        self.assertEqual(result[1][0], "A.2")
+
+    def test_single_line_multiple_levels(self):
+        lines = ["A.1.a All in one line"]
+        tree = StatuteTree(lines)
+        result = tree.walk()
+        self.assertEqual(result[0][0], "A.1.a")
+        self.assertIn("All in one line", result[0][1])
+
+    # # Placeholder for future real-world test cases
+    # def test_real_statute_1(self):
+    #     lines = [
+    #         # Fill this in with real edge case input from a statute
+    #     ]
+    #     tree = StatuteTree(lines)
+    #     result = tree.walk(append_parents=True, leaf_only=True)
+    #     self.assertIsInstance(result, list)
+
+    # def test_real_statute_2(self):
+    #     lines = [
+    #         # Fill this in with another real example
+    #     ]
+    #     tree = StatuteTree(lines)
+    #     result = tree.walk(append_parents=True, leaf_only=True)
+    #     self.assertIsInstance(result, list)
 
 
 class TestStatuteText(unittest.TestCase):
