@@ -43,24 +43,27 @@ class StatuteFormatter:
             if not all((v is None or str(v).strip() == "") for v in item.values())
         ]
 
-    def _first_draft_prompt(self, raw: List[str]) -> str:
+    def _first_draft_prompt(self, raw: List[str]) -> tuple[str, str]:
         joined = "\n".join(f'"{line}"' for line in raw)
-        return textwrap.dedent(f"""
+        system = textwrap.dedent("""
             /no_think
             Instructions:
             You are parsing statute text. Break it into a series of labeled sections.
 
             Rules:
             1. Always enclose the parsed lines in a list -> []
-            2. Only treat a label like “A.”, “1.”, or “(a)” as a section header if it appears at the start of a line or clause. Do not skip it even if it appears after a long list — it may start a new section.
+            2. If a line contains more than one labeled section (e.g., "A. 1. Text..."), break it into multiple items: one for each label.
+                - The first gets an empty text if there's nothing but a label.
+                - The second (and others) get the remaining content.
             3. Only write the character component of the label, e.g., (a) -> a, 1. -> 1, [ii] -> ii
             4. Many statutes don't use labeled lists, simply parse them as {{"label": "", "text": "[text]"}}.
             5. Trailing lines that occur after a labeled section (see examples) are also parsed as they are in 2.
             6. If labels like “a.” or “b.” appear in the middle of a sentence, treat them as separate items in the same level.
-            
+            7. It's possible for one line to contain multiple labeled sections. 
 
             Input:
             [
+                "A. 1. This statute is enforced for Bucks county",
                 "B. The following are considered violations:",
                 "a. Reckless driving",
                 "b. Public endangerment",
@@ -70,20 +73,25 @@ class StatuteFormatter:
 
             Output:
             [
+                {{"label": "A", "text": ""}},
+                {{"label": "1", "text": "This statute is enforced for Bucks county"}},
                 {{"label": "B", "text": "The following are considered violations:"}},
                 {{"label": "a", "text": "Reckless driving"}},
                 {{"label": "b", "text": "Public endangerment"}},
                 {{"label": "c", "text": "Negligent discharge"}},
                 {{"label": "", "text": "These are all subsections of section B."}}
             ]
-
-            Here is the statute:
-            STATUTE:
-            {joined}
         """)
 
-    def _line_proofing_prompt(self, raw_line: Dict[str, str]) -> str:
-        return textwrap.dedent(f"""
+        user = textwrap.dedent(f"""
+            Parse the following statute:
+            {joined}
+        """)
+        return system, user
+        
+
+    def _line_proofing_prompt(self, raw_line: Dict[str, str]) -> tuple[str, str]:
+        system = textwrap.dedent("""
             You are a legal text proofreader that ensures each parsed line of statute text is formatted correctly.
 
             The input is a dictionary with exactly two keys:
@@ -124,15 +132,18 @@ class StatuteFormatter:
             Output:
             {{"label": "C", "text": "This is the next section"}}
 
-            ---
-
-            Now proofread this line:
-            {json.dumps(raw_line)}
+        """)
+        user = textwrap.dedent(f"""
+            Proofread this line:
+            {json.dumps(raw_line)}        
         """)
 
-    def _run_ollama(self, prompt: str, primer: str = "Output: ") -> OllamaChatStream:
+        return system, user
+
+    def _run_ollama(self, system_prompt: str, user_prompt: str, primer: str = "Output: ") -> OllamaChatStream:
         return OllamaChatStream(
-            prompt,
+            user_prompt,
+            system=system_prompt,
             model=self.model,
             num_ctx=self.context_length,
             top_k=1,
@@ -153,8 +164,8 @@ class StatuteFormatter:
             print(raw_statute)
 
         cleaned_lines = self.clean_lines(raw_statute)
-        prompt = self._first_draft_prompt(cleaned_lines)
-        raw_response = self._run_ollama(prompt)
+        system_prompt, user_prompt = self._first_draft_prompt(cleaned_lines)
+        raw_response = self._run_ollama(system_prompt, user_prompt)
         parsed = extract_json(raw_response)
         parsed = self.remove_empty_lines(parsed)
 
@@ -171,8 +182,8 @@ class StatuteFormatter:
         for entry in parsed:
             if self.verbose:
                 print("Proofing line: ", entry)
-            proofed_prompt = self._line_proofing_prompt(entry)
-            proofed_response = self._run_ollama(proofed_prompt)
+            system_prompt, user_prompt = self._line_proofing_prompt(entry)
+            proofed_response = self._run_ollama(system_prompt, user_prompt)
             corrected = extract_json(proofed_response)
             final_entries.append(corrected)
 
