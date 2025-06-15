@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import List, Dict, Union
 
 from nlp.ollama import OllamaChatStream
-from nlp.utils import extract_json, format_json_one_line_dicts
+from nlp.utils import extract_json
 
 
 def first_draft_prompt(raw: list[str]):
@@ -44,7 +44,8 @@ def first_draft_prompt(raw: list[str]):
         {joined}
     """
 
-def proofing_prompt(raw_line: dict[str, str]) -> str:
+
+def line_proofing_prompt(raw_line: dict[str, str]) -> str:
     return f"""
         You are a legal text proofreader that ensures each parsed line of statute text is formatted correctly.
 
@@ -99,17 +100,6 @@ def proofing_prompt(raw_line: dict[str, str]) -> str:
     """
 
 
-def write_statute_json(
-    output_folder: Path, citation: str, json_data: Union[List, Dict]
-):
-    """Writes the JSON data to disk under a consistent filename."""
-    output_folder.mkdir(parents=True, exist_ok=True)
-    out_path = output_folder / f"{citation}.json"
-    with out_path.open("w", encoding="utf-8") as f:
-        json.dump(json_data, f, indent=2, ensure_ascii=False)
-    print(f"✅ Saved: {out_path}")
-
-
 def clean_input_lines(lines: list[str]) -> list[str]:
     cleaned_lines = []
     for line in lines:
@@ -119,7 +109,7 @@ def clean_input_lines(lines: list[str]) -> list[str]:
     return cleaned_lines
 
 
-def clean_draft(json: list[dict]) -> list[dict]:
+def remove_empty_lines(json: list[dict]) -> list[dict]:
     cleaned = []
     for item in json:
         if all((v is None or str(v).strip() == "") for v in item.values()):
@@ -129,7 +119,7 @@ def clean_draft(json: list[dict]) -> list[dict]:
 
 
 def format_raw_statute(
-    raw_statute: list[str], model, proofread=True, context_length=32768, verbose=False
+    raw_statute: list[str], model, proofread=False, context_length=32768, verbose=False
 ) -> str:
     """Runs the LLM to extract format a statute as list of lines."""
 
@@ -151,7 +141,7 @@ def format_raw_statute(
 
     first_draft_json = extract_json(first_draft_response)
 
-    cleaned_draft_json = clean_draft(first_draft_json)
+    cleaned_draft_json = remove_empty_lines(first_draft_json)
 
     if not proofread:
         return first_draft_json
@@ -164,14 +154,14 @@ def format_raw_statute(
         if verbose:
             print("Proofing line: ", clean_entry_draft)
         proofread_entry_response = OllamaChatStream(
-            proofing_prompt(clean_entry_draft),
+            line_proofing_prompt(clean_entry_draft),
             model=model,
             num_ctx=context_length,
             top_k=1,
             top_p=1,
             temperature=0,
             verbose=verbose,
-            primer="Correct line: ",
+            primer="Output: ",
         )
         proofread_json_entry = extract_json(proofread_entry_response)
         final_entries.append(proofread_json_entry)
