@@ -1,12 +1,10 @@
-from typing import List, Dict
 import json
 
 from nlp.ollama import OllamaChatStream
 
-
 THINK_TAG = "</think>"
 
-def extract_json(response_stream: OllamaChatStream, check_context_length: int | None = None):
+def extract_json(response_stream: OllamaChatStream, check_context_length: int | None = None) -> list | dict:
     """
     Extracts the first valid JSON object or array from an LLM response using bracket counting.
 
@@ -48,4 +46,3 @@ def extract_json(response_stream: OllamaChatStream, check_context_length: int | 
                         raise ValueError(f"JSON decoding failed: {e}")
 
     raise ValueError("No balanced JSON object or array found in LLM output.")
-

@@ -13,7 +13,7 @@ def parse_statute_folder(
     verbose=False,
 ):
     formatter = StatuteFormatter(
-        model=model, context_length=context_length, proofread=False, verbose=verbose
+        model=model, context_length=context_length, proofread=True, verbose=verbose
     )
 
     input_folder = Path(input_folder)
@@ -38,7 +38,9 @@ def parse_statute_folder(
         raw_texts = data.get("raw_texts")
         if not raw_texts or not isinstance(raw_texts, list):
             raise ValueError(f"No valid 'raw_texts' in {file_path.name}")
-
+        
+        print()
+        print()
         print(f"Processing {file_path.name}...")
 
         result = formatter.process_statute(raw_statute=raw_texts)
