@@ -15,8 +15,6 @@ def extract_json(response_stream: OllamaChatStream, check_context_length: int | 
         ValueError: If no complete JSON structure is found or decoding fails.
     """
     response = "".join(response_stream)
-    if THINK_TAG in response:
-        response = response.split(THINK_TAG, 1)[1].lstrip()
 
     if check_context_length:
         if response_stream.prompt_eval_count + response_stream.eval_count > check_context_length:

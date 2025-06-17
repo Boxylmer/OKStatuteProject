@@ -1,8 +1,10 @@
+from collections import Counter
 import json
 from pathlib import Path
 from typing import Union
 
-from nlp.statute_formatter import StatuteFormatter
+
+from nlp.statute_formatter import StatuteFormatter, StatutePostprocessor
 
 
 def parse_statute_folder(
@@ -19,11 +21,6 @@ def parse_statute_folder(
     input_folder = Path(input_folder)
     output_folder = Path(output_folder)
     output_folder.mkdir(parents=True, exist_ok=True)
-
-    if not input_folder.exists() or not input_folder.is_dir():
-        raise ValueError(f"Invalid input folder path: {input_folder}")
-
-    parsed_results = {}
 
     for file_path in input_folder.glob("*.json"):
         output_path = output_folder / file_path.name
@@ -42,15 +39,48 @@ def parse_statute_folder(
         print()
         print()
         print(f"Processing {file_path.name}...")
+        try:
+            result = formatter.process_statute_line_by_line(raw_statute=raw_texts)
 
-        result = formatter.process_statute_line_by_line(raw_statute=raw_texts)
+            with open(output_path, "w", encoding="utf-8") as out_f:
+                out_f.write(json.dumps(result, indent=2, ensure_ascii=False))
+        except Exception:
+            print("--------------------------------FAILED--------------------------------")
+            
+def postprocess_statutes(
+    input_folder: Union[str, Path],
+    output_folder: Union[str, Path],
+    verbose=False,
+):
+    formatter = StatutePostprocessor()
 
-        with open(output_path, "w", encoding="utf-8") as out_f:
-            out_f.write(json.dumps(result, indent=2, ensure_ascii=False))
+    input_folder = Path(input_folder)
+    output_folder = Path(output_folder)
+    output_folder.mkdir(parents=True, exist_ok=True)
 
-        parsed_results[file_path.name] = result
+    unlabeled_lengths = []
+    for file_path in input_folder.glob("*.json"):
+        output_path = output_folder / file_path.name
 
-    return parsed_results
+        if output_path.exists():
+            print(f"Skipping {file_path.name}, already parsed.")
+            continue
+
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        
+        print()
+        print()
+        print(f"Postprocessing {file_path.name}...")
+
+        unlabeled_lengths.extend(formatter.log_unlabeled_line_lengths(parsed_statute=data))
+
+        # with open(output_path, "w", encoding="utf-8") as out_f:
+        #     out_f.write(json.dumps(result, indent=2, ensure_ascii=False))
+    
+    counted_lengths = Counter(unlabeled_lengths)
+    for length in sorted(counted_lengths):
+        print(f"{str(length).rjust(5)} → {str(counted_lengths[length]).rjust(5)}")
 
 
 if __name__ == "__main__":
@@ -59,5 +89,10 @@ if __name__ == "__main__":
         output_folder=Path("data") / "formatted_statutes",
         model="qwen3:14b",
         context_length=4096,
+        verbose=True,
+    )
+    postprocess_statutes(
+        input_folder=Path("data") / "formatted_statutes",
+        output_folder=Path("data") / "postprocessed_statutes",
         verbose=True,
     )

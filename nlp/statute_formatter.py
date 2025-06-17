@@ -46,31 +46,8 @@ def find_extra_words(original: str, copied: str) -> List[str]:
     return extra
 
 
-# def check_copy_loss(
-#     raw: List[str], parsed: List[Dict[str, str]], verbose: bool = False
-# ) -> list[str]:
-#     """Check if any words were lost in the parsing process."""
-#     missing = find_missing_words(raw, parsed)
-#     if missing:
-#         if verbose:
-#             print()
-#             print(
-#                 "--> PROOFREADING: ⚠️  WARNING: Missing words detected during parsing operation!"
-#             )
-#             for word in sorted(missing):
-#                 print(f"- {word}")
-
-
-#         return list(missing)
-#     else:
-#         if verbose:
-#             print()
-#             print(
-#                 "--> PROOFREADING: ✅ All words from the original statute are present in the parsed output."
-#             )
-#         return []
 def check_copy_loss(
-    raw: List[str], parsed: List[Dict[str, str]], verbose: bool = False
+    raw: str, parsed: Dict[str, str], verbose: bool = False
 ) -> tuple[list[str], list[str]]:
     """
     Check for missing or extra words between the raw input and the parsed output.
@@ -81,13 +58,10 @@ def check_copy_loss(
             "extra": list of extra words (repeated)
         }
     """
-    raw_text = " ".join(raw)
-    parsed_text = " ".join(
-        (item.get("label", "") + " " + item.get("text", "")).strip() for item in parsed
-    )
+    parsed_text = (parsed.get("label", "") + " " + parsed.get("text", "")).strip()
 
-    missing = find_missing_words(raw_text, parsed_text)
-    extra = find_extra_words(raw_text, parsed_text)
+    missing = find_missing_words(raw, parsed_text)
+    extra = find_extra_words(raw, parsed_text)
 
     if verbose:
         if missing:
@@ -134,60 +108,14 @@ class StatuteFormatter:
         ]
 
     @staticmethod
-    def remove_empty_lines(list_of_dicts: list[dict]) -> list[dict]:
-        "Remove all dicts from a list of dicts in which the dicts have all falsy values."
-        cleaned = []
-        for item in list_of_dicts:
-            if all((v is None or str(v).strip() == "") for v in item.values()):
-                continue
-            cleaned.append(item)
-        return cleaned
+    def check_first_pass_output(obj: dict[str, str]):
+        if "label" not in obj:
+            raise ValueError(f"label field not present in line: {obj}.")
 
-    @staticmethod
-    def clean_first_pass_output(objs):
-        if isinstance(objs, dict):
-            objs = [objs]
+        if "text" not in obj:
+            raise ValueError(f"text field not present in line: {obj}.")
 
-        for obj in objs:
-            if "label" not in obj:
-                raise ValueError(f"label field not present in line: {obj}.")
-
-            if "text" not in obj:
-                raise ValueError(f"text field not present in line: {obj}.")
-
-        return StatuteFormatter.remove_empty_lines(objs)
-
-    def _first_draft_prompt(self, raw: List[str]) -> tuple[str, str]:
-        joined = "\n".join(f"{line}" for line in raw)
-        system = textwrap.dedent("""
-            Instructions:
-            You are parsing statute text. Break it into a series of labeled sections while preserving the text EXACTLY as it is in .
-
-            Rules:
-            1. Always enclose the parsed lines in a list -> []
-            2. Statutes that do not used labeled lists are parsed as {"label": "", "text": "[text]"}.
-            3. Trailing lines that occur after a labeled section are parsed as {"label": "", "text": "[text]"}.
-            4. It's possible for one line to contain multiple labeled sections. 
-            5. Do not reword the statute. Copy the lines verbatim, including spelling mistakes and punctuation errors.  
-
-            Input:
-            
-                A. 1. This statute is enforced for Bucks county
-                B. The following are considered violations:
-                a. Reckless driving
-                b. Public endangerment
-                c. Negligent discharge
-                These are all subsections of section B.
-
-            Output:
-            [{"label": "A", "text": ""}, {"label": "1", "text": "This statute is enforced for Bucks county"}, {"label": "B", "text": "The following are considered violations:"}, {"label": "a", "text": "Reckless driving"}, {"label": "b", "text": "Public endangerment"}, {"label": "c", "text": "Negligent discharge"}, {"label": "", "text": "These are all subsections of section B."}]
-        """)
-
-        user = textwrap.dedent(f"""
-            Parse the following statute:
-            {joined}
-        """)
-        return system, user
+        return obj
 
     def _first_draft_missing_text(
         self, statute: list[str], previous_result: list[dict], missing_words: list[str]
@@ -249,7 +177,11 @@ class StatuteFormatter:
         return system, user
 
     def _line_proofing_prompt(
-        self, raw_line: str, parsed_line: dict[str, str], missing_words: list[str], extra_words: list[str]
+        self,
+        raw_line: str,
+        parsed_line: dict[str, str],
+        missing_words: list[str],
+        extra_words: list[str],
     ) -> tuple[str, str]:
         system = textwrap.dedent("""
             /no_think
@@ -266,6 +198,20 @@ class StatuteFormatter:
             - Take any words present in MISSING_WORDS and ensure the parsed text has them in the right place. 
             - Take and words present in EXTRA_WORDS and ensure they're removed from the parsed text. 
             - If multiple labels are in a line e.g., "a. the law is this and b. the law is that", then leave the label field empty and copy the text verbatim.
+            - Do not fix typos in the original statute text.
+            
+            Rules used for the first pass (and still applicable here):
+            1. All the text should be copies either into the label or text field. Nothing should be reworded or omitted except for label punctuation. 
+            2. Statutes that do not used labeled lists are parsed as {"label": "", "text": "[text]"}.
+            3. Only copy the alphanumeric component of the label. e.g., "A." becomes "A", "(1):" becomes "1".
+            4. Nested labels can be separated with a "." in the label field. E.g., "A. 1:" becomes "A.1"
+            5. If multiple labels are in a line e.g., "a. the law is this and b. the law is that", then leave the label field empty and copy the text verbatim.
+            
+            Examples: 
+            {"label": "1", "text": "1. foobar baz"} -> {"label": "1", "text": "foobar baz"} # duplicate label
+            {"label": "", "text": "1. foobar baz"} -> {"label": "1", "text": "foobar baz"} # label wasn't in the right place
+            {"label": "1", "text": "foobar baz"} -> {"label": "1", "text": "foobar baz"} # no change needed
+            
             
         """)
         user = textwrap.dedent(f"""
@@ -298,75 +244,6 @@ class StatuteFormatter:
             primer=primer,
         )
 
-    def process_statute(self, raw_statute: List[str]) -> List[Dict[str, str]]:
-        """
-        Format a list of raw statute lines into structured label/text pairs using an LLM.
-        Optionally performs a proofreading pass to fix label placement and cleanup.
-        """
-        if self.verbose:
-            print("______________________")
-            print("--> Parsing the following statute text:")
-            print(raw_statute)
-
-        cleaned_lines = self.clean_statute_input(raw_statute)
-
-        system_prompt, user_prompt = self._first_draft_prompt(cleaned_lines)
-
-        if self.verbose:
-            print()
-            print("--> LLM output (first draft):")
-        first_draft_response = self._run_ollama(system_prompt, user_prompt)
-
-        parsed = self.clean_first_pass_output(extract_json(first_draft_response)[-1])
-
-        if self.verbose:
-            print()
-            print(
-                f"--> First draft parsed using {first_draft_response.total_eval_count} tokens."
-            )
-
-        if self.verbose:
-            print()
-            print("--> Cleaned first-pass output to:")
-            print(json.dumps(parsed))
-
-        if self.proofread:
-            if self.verbose:
-                print()
-                print("--> PROOFREADING: Checking parsing continuity...")
-            missing_words = check_copy_loss(cleaned_lines, parsed, verbose=self.verbose)
-            n_missing_words = len(missing_words)
-            progress_history = [n_missing_words]
-            while n_missing_words > 0:
-                if self.verbose:
-                    print(
-                        f"--> PROOFREADING: First is missing the following words: {missing_words}. Retrying with clarification..."
-                    )
-                retry_system, retry_user = self._first_draft_missing_text(
-                    raw_statute, parsed, missing_words
-                )
-                response = self._run_ollama(retry_system, retry_user)
-                parsed = self.clean_first_pass_output(extract_json(response)[-1])
-                missing_words = check_copy_loss(cleaned_lines, parsed)
-                n_new_missing_words = len(missing_words)
-
-                if n_new_missing_words >= n_missing_words:  # we must see improvement
-                    extra = ""
-                    if not self.verbose:
-                        extra = " (Run with verbose=True to see problems)"
-                    raise ValueError(
-                        f"Attempted to parse statute twice, but could not correct missing entries. Number of missing words progressed as {progress_history} before increasing to {n_new_missing_words} missing words."
-                        + extra
-                    )
-                else:
-                    n_missing_words = n_new_missing_words
-                    progress_history.append(n_missing_words)
-
-            if self.verbose:
-                print("--> PROOFREADING: ✅ Correction succeeded!")
-
-        return parsed
-
     def process_statute_line_by_line(
         self, raw_statute: list[str]
     ) -> list[dict[str, str]]:
@@ -390,11 +267,16 @@ class StatuteFormatter:
             response = self._run_ollama(
                 system_prompt=system_prompt, user_prompt=user_prompt, primer="Output: "
             )
-            parsed = self.clean_first_pass_output(extract_json(response)[-1])[0]
-            missing_words, extra_words = check_copy_loss([line], [parsed], verbose=self.verbose)
+            parsed = self.check_first_pass_output(extract_json(response)[-1])
+            missing_words, extra_words = check_copy_loss(
+                line, parsed, verbose=self.verbose
+            )
 
             system_prompt, user_prompt = self._line_proofing_prompt(
-                raw_line=line, parsed_line=parsed, missing_words=missing_words, extra_words=extra_words
+                raw_line=line,
+                parsed_line=parsed,
+                missing_words=missing_words,
+                extra_words=extra_words,
             )
             if self.verbose:
                 print()
@@ -402,16 +284,61 @@ class StatuteFormatter:
             response = self._run_ollama(
                 system_prompt=system_prompt, user_prompt=user_prompt, primer="Output: "
             )
-            proofread = self.clean_first_pass_output(extract_json(response)[-1])[0]
-            
-            missing_words, extra_words = check_copy_loss([line], [proofread], verbose=self.verbose)
-            
+            proofread = self.check_first_pass_output(extract_json(response)[-1])
+
+            missing_words, extra_words = check_copy_loss(
+                line, proofread, verbose=self.verbose
+            )
+
             if missing_words:
                 raise ValueError("Missing words in proofread response: ", missing_words)
-            
+
             if extra_words:
                 raise ValueError("Extra words in proofread response: ", extra_words)
-            
+
+            if not proofread["label"] and not proofread['text']:
+                if self.verbose:
+                    print("--> LINE WAS EMPTY")
+                continue 
+
             parsed_lines.append(proofread)
 
         return parsed_lines
+
+
+class StatutePostprocessor:
+    """Aggregate the statutes into"""
+
+    def __init__(
+        self,
+        # model: str,
+        # context_length: int,
+        # proofread: bool = False,
+        # verbose: bool = False,
+    ):
+        pass
+        # self.model = model
+        # self.context_length = context_length
+        # self.proofread = proofread
+        # self.verbose = verbose
+
+    # goals: Take in the statute, for each line which has a subsequent line after it with no label, determine if that line is "trailing text" or a continuation of the sentence (and thus should be joined to it)
+    # e.g, any line with no label that's just "and" should be lumped into the previous line, as well as probably most other one-word things.
+
+    # goal: (maybe we don't need an llm for this) determin if a line denotes the start of a new version of the statute. Find the latest version, remove all lines from previous versions.
+    # version text kind of looks like this "Version 2 (Amended by Laws 2024, HB 3157, c. 267, § 2, eff. November 1, 2024)", but just like everything else in OSCN, are super inconsistent and often have other formats I can't predict.
+
+    def log_unlabeled_line_lengths(self, parsed_statute: list[dict[str, str]]) -> list[int]:
+        lengths = []
+
+        for i, item in enumerate(parsed_statute):
+            if item["label"] == "":
+                lengths.append(len(item["text"]))
+
+        # distribution = Counter(lengths)
+
+        # print("Unlabeled line length distribution (excluding first line):")
+        # for length, count in sorted(distribution.items()):
+        #     print(f"  Length {length:>3}: {count} line(s)")
+
+        return lengths
