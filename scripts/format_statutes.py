@@ -43,7 +43,7 @@ def parse_statute_folder(
         print()
         print(f"Processing {file_path.name}...")
 
-        result = formatter.process_statute(raw_statute=raw_texts)
+        result = formatter.process_statute_line_by_line(raw_statute=raw_texts)
 
         with open(output_path, "w", encoding="utf-8") as out_f:
             out_f.write(json.dumps(result, indent=2, ensure_ascii=False))
@@ -57,7 +57,7 @@ if __name__ == "__main__":
     parse_statute_folder(
         input_folder=Path("data") / "statute_cache",
         output_folder=Path("data") / "formatted_statutes",
-        model="qwen3:8b",
-        context_length=16384,
+        model="qwen3:14b",
+        context_length=4096,
         verbose=True,
     )

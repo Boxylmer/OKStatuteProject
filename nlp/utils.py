@@ -30,6 +30,7 @@ def extract_json(response_stream: OllamaChatStream, check_context_length: int | 
     open_stack = []
     start_idx = None
 
+    jsons = []
     for i, ch in enumerate(response):
         if ch in start_chars:
             if not open_stack:
@@ -41,8 +42,9 @@ def extract_json(response_stream: OllamaChatStream, check_context_length: int | 
                 if not open_stack and start_idx is not None:
                     json_str = response[start_idx : i + 1]
                     try:
-                        return json.loads(json_str)
+                        jsons.append(json.loads(json_str))
                     except json.JSONDecodeError as e:
                         raise ValueError(f"JSON decoding failed: {e}")
+    return jsons
 
-    raise ValueError("No balanced JSON object or array found in LLM output.")
+    # raise ValueError("No balanced JSON object or array found in LLM output.")
