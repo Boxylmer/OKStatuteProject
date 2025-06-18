@@ -46,7 +46,7 @@ def parse_statute_folder(
                 out_f.write(json.dumps(result, indent=2, ensure_ascii=False))
         except Exception:
             print("--------------------------------FAILED--------------------------------")
-            
+
 def postprocess_statutes(
     input_folder: Union[str, Path],
     output_folder: Union[str, Path],
@@ -91,8 +91,8 @@ if __name__ == "__main__":
         context_length=4096,
         verbose=True,
     )
-    postprocess_statutes(
-        input_folder=Path("data") / "formatted_statutes",
-        output_folder=Path("data") / "postprocessed_statutes",
-        verbose=True,
-    )
+    # postprocess_statutes(
+    #     input_folder=Path("data") / "formatted_statutes",
+    #     output_folder =Path("data") / "postprocessed_statutes",
+    #     verbose=True,
+    # )

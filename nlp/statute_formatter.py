@@ -194,6 +194,7 @@ class StatuteFormatter:
 
             Your job is to:
             - Ensure the output is in this format: {"label": "<label>", "text": "<text>"} (with both as strings)
+            
             - Extract any subsection label from the beginning of "text" (e.g., {label: "", text: "B. The law..."} should be {label: "B", text: "The law..."})
             - Take any words present in MISSING_WORDS and ensure the parsed text has them in the right place. 
             - Take and words present in EXTRA_WORDS and ensure they're removed from the parsed text. 
@@ -267,36 +268,39 @@ class StatuteFormatter:
             response = self._run_ollama(
                 system_prompt=system_prompt, user_prompt=user_prompt, primer="Output: "
             )
-            parsed = self.check_first_pass_output(extract_json(response)[-1])
+            
+            parsed_line = self.check_first_pass_output(extract_json(response)[-1])
             missing_words, extra_words = check_copy_loss(
-                line, parsed, verbose=self.verbose
+                line, parsed_line, verbose=self.verbose
             )
+            if missing_words or extra_words:
+                system_prompt, user_prompt = self._line_proofing_prompt(
+                    raw_line=line,
+                    parsed_line=parsed_line,
+                    missing_words=missing_words,
+                    extra_words=extra_words,
+                )
+                if self.verbose:
+                    print()
+                    print("--> LLM output (proofreading pass)")
+                response = self._run_ollama(
+                    system_prompt=system_prompt, user_prompt=user_prompt, primer="Output: "
+                )
+                proofread = self.check_first_pass_output(extract_json(response)[-1])
 
-            system_prompt, user_prompt = self._line_proofing_prompt(
-                raw_line=line,
-                parsed_line=parsed,
-                missing_words=missing_words,
-                extra_words=extra_words,
-            )
-            if self.verbose:
-                print()
-                print("--> LLM output (proofreading pass)")
-            response = self._run_ollama(
-                system_prompt=system_prompt, user_prompt=user_prompt, primer="Output: "
-            )
-            proofread = self.check_first_pass_output(extract_json(response)[-1])
+                missing_words, extra_words = check_copy_loss(
+                    line, proofread, verbose=self.verbose
+                )
 
-            missing_words, extra_words = check_copy_loss(
-                line, proofread, verbose=self.verbose
-            )
+                if missing_words:
+                    raise ValueError("Missing words in proofread response: ", missing_words)
 
-            if missing_words:
-                raise ValueError("Missing words in proofread response: ", missing_words)
+                if extra_words:
+                    raise ValueError("Extra words in proofread response: ", extra_words)
 
-            if extra_words:
-                raise ValueError("Extra words in proofread response: ", extra_words)
+                parsed_line = proofread
 
-            if not proofread["label"] and not proofread['text']:
+            if not parsed_line["label"] and not parsed_line['text']:
                 if self.verbose:
                     print("--> LINE WAS EMPTY")
                 continue 
