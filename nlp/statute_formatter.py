@@ -47,18 +47,23 @@ def find_extra_words(original: str, copied: str) -> List[str]:
 
 
 def check_copy_loss(
-    raw: str, parsed: Dict[str, str], verbose: bool = False
-) -> tuple[list[str], list[str]]:
+    raw: str, parsed: List[Dict[str, str]], verbose: bool = False
+) -> tuple[List[str], List[str]]:
     """
     Check for missing or extra words between the raw input and the parsed output.
 
-    Returns a dict:
-        {
-            "missing": list of missing words (repeated),
-            "extra": list of extra words (repeated)
-        }
+    Args:
+        raw: The original raw string.
+        parsed: A list of parsed items, each a dict with optional 'label' and 'text'.
+        verbose: Whether to print a summary of detected issues.
+
+    Returns:
+        (missing, extra): A tuple of lists of missing and extra words.
     """
-    parsed_text = (parsed.get("label", "") + " " + parsed.get("text", "")).strip()
+    parsed_text = " ".join(
+        (item.get("label", "") + " " + item.get("text", "")).strip()
+        for item in parsed
+    ).strip()
 
     missing = find_missing_words(raw, parsed_text)
     extra = find_extra_words(raw, parsed_text)
@@ -79,7 +84,6 @@ def check_copy_loss(
             print("\n--> PROOFREADING: ✅ No extra words.")
 
     return missing, extra
-
 
 class StatuteFormatter:
     def __init__(
@@ -108,14 +112,19 @@ class StatuteFormatter:
         ]
 
     @staticmethod
-    def check_first_pass_output(obj: dict[str, str]):
-        if "label" not in obj:
-            raise ValueError(f"label field not present in line: {obj}.")
+    def extract_response(response: list | dict) -> list[dict[str, str]]:
+        json_output = extract_json(response)[-1]
+        if isinstance(json_output, dict):
+            json_output = [json_output]
 
-        if "text" not in obj:
-            raise ValueError(f"text field not present in line: {obj}.")
+        for json_item in json_output:
+            if "label" not in json_item:
+                raise ValueError(f"label field not present in line: {json_item}.")
 
-        return obj
+            if "text" not in json_item:
+                raise ValueError(f"text field not present in line: {json_item}.")
+
+        return json_output
 
     def _first_draft_missing_text(
         self, statute: list[str], previous_result: list[dict], missing_words: list[str]
@@ -160,8 +169,8 @@ class StatuteFormatter:
             2. Statutes that do not used labeled lists are parsed as {"label": "", "text": "[text]"}.
             3. Only copy the alphanumeric component of the label. e.g., "A." becomes "A", "(1):" becomes "1".
             4. Nested labels can be separated with a "." in the label field. E.g., "A. 1:" becomes "A.1"
-            5. If multiple labels are in a line e.g., "a. the law is this and b. the law is that", then leave the label field empty and copy the text verbatim.
-            
+            5. If multiple labels are in a line e.g., "a. the law is this and b. the law is that", then make sure you put the parsed lines in a list [{"label": "[label]", "text": "[text]"}, ...]
+            6. Do not fix typos. 
 
             Example Input:
                 A. 1. This statute is enforced for Bucks county
@@ -179,7 +188,7 @@ class StatuteFormatter:
     def _line_proofing_prompt(
         self,
         raw_line: str,
-        parsed_line: dict[str, str],
+        output_lines: dict[str, str],
         missing_words: list[str],
         extra_words: list[str],
     ) -> tuple[str, str]:
@@ -199,14 +208,16 @@ class StatuteFormatter:
             - Take any words present in MISSING_WORDS and ensure the parsed text has them in the right place. 
             - Take and words present in EXTRA_WORDS and ensure they're removed from the parsed text. 
             - If multiple labels are in a line e.g., "a. the law is this and b. the law is that", then leave the label field empty and copy the text verbatim.
-            - Do not fix typos in the original statute text.
+            - Make sure that the first pass didn't get overzealous and fix typos. 
             
-            Rules used for the first pass (and still applicable here):
+            Rules:
             1. All the text should be copies either into the label or text field. Nothing should be reworded or omitted except for label punctuation. 
             2. Statutes that do not used labeled lists are parsed as {"label": "", "text": "[text]"}.
             3. Only copy the alphanumeric component of the label. e.g., "A." becomes "A", "(1):" becomes "1".
             4. Nested labels can be separated with a "." in the label field. E.g., "A. 1:" becomes "A.1"
-            5. If multiple labels are in a line e.g., "a. the law is this and b. the law is that", then leave the label field empty and copy the text verbatim.
+            5. If multiple labels are in a line e.g., "a. the law is this and b. the law is that", then make sure you put the parsed lines in a list [{"label": "[label]", "text": "[text]"}, ...]
+            6. Do not fix typos. 
+
             
             Examples: 
             {"label": "1", "text": "1. foobar baz"} -> {"label": "1", "text": "foobar baz"} # duplicate label
@@ -220,7 +231,7 @@ class StatuteFormatter:
             
             STATUTE TEXT: {raw_line}                   
             
-            PARSED_LINE: {json.dumps(parsed_line)}
+            PARSED_LINE: {json.dumps(output_lines)}
             
             MISSING_WORDS: {missing_words}   
 
@@ -259,24 +270,24 @@ class StatuteFormatter:
 
         cleaned_lines = self.clean_statute_input(raw_statute)
         parsed_lines = []
-        for line in cleaned_lines:
-            system_prompt, user_prompt = self._first_draft_prompt_single_line(line)
+        for raw_line in cleaned_lines:
+            system_prompt, user_prompt = self._first_draft_prompt_single_line(raw_line)
             if self.verbose:
                 print()
-                print(f"--> Working on line: {line}")
+                print(f"--> Working on line: {raw_line}")
                 print("--> LLM output (first pass)")
             response = self._run_ollama(
                 system_prompt=system_prompt, user_prompt=user_prompt, primer="Output: "
             )
+            lines_in_string = self.extract_response(response)
             
-            parsed_line = self.check_first_pass_output(extract_json(response)[-1])
             missing_words, extra_words = check_copy_loss(
-                line, parsed_line, verbose=self.verbose
+                raw_line, lines_in_string, verbose=self.verbose
             )
             if missing_words or extra_words:
                 system_prompt, user_prompt = self._line_proofing_prompt(
-                    raw_line=line,
-                    parsed_line=parsed_line,
+                    raw_line=raw_line,
+                    output_lines=lines_in_string,
                     missing_words=missing_words,
                     extra_words=extra_words,
                 )
@@ -286,10 +297,10 @@ class StatuteFormatter:
                 response = self._run_ollama(
                     system_prompt=system_prompt, user_prompt=user_prompt, primer="Output: "
                 )
-                proofread = self.check_first_pass_output(extract_json(response)[-1])
-
+                proofread_lines_in_string = self.extract_response(response)
+                
                 missing_words, extra_words = check_copy_loss(
-                    line, proofread, verbose=self.verbose
+                    raw_line, proofread_lines_in_string, verbose=self.verbose
                 )
 
                 if missing_words:
@@ -298,14 +309,15 @@ class StatuteFormatter:
                 if extra_words:
                     raise ValueError("Extra words in proofread response: ", extra_words)
 
-                parsed_line = proofread
+                lines_in_string = proofread_lines_in_string
 
-            if not parsed_line["label"] and not parsed_line['text']:
-                if self.verbose:
-                    print("--> LINE WAS EMPTY")
-                continue 
-
-            parsed_lines.append(proofread)
+            for line in lines_in_string:
+                if not line["label"] and not line['text']:
+                    if self.verbose:
+                        print("--> LINE WAS EMPTY")
+                    continue 
+                else:
+                    parsed_lines.append(line)
 
         return parsed_lines
 
