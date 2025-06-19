@@ -85,7 +85,30 @@ def check_copy_loss(
 
     return missing, extra
 
+
+def is_compound_typo(missing_words: list[str], extra_words: list[str]) -> bool:
+    """
+    Returns True if a single missing word appears to be a compound that was split
+    into two or more extra words.
+    Example: missing = ["consumealcoholic"], extra = ["consume", "alcoholic"]
+    """
+    if len(missing_words) != 1 or len(extra_words) < 2:
+        return False
+
+    missing = missing_words[0].lower()
+    extra_joined = "".join(extra_words).lower()
+
+    return missing == extra_joined
+
+def common_issue(missing_words: list[str], extra_words: list[str]) -> bool:
+    if is_compound_typo(missing_words, extra_words):
+        return True
+    
+    return False
+
 class StatuteFormatter:
+    MAX_RETRIES = 3
+
     def __init__(
         self,
         model: str,
@@ -242,7 +265,7 @@ class StatuteFormatter:
         return system, user
 
     def _run_ollama(
-        self, system_prompt: str, user_prompt: str, primer: str = ""
+        self, system_prompt: str, user_prompt: str, primer: str = "", temperature=0
     ) -> OllamaChatStream:
         return OllamaChatStream(
             user_prompt,
@@ -251,7 +274,7 @@ class StatuteFormatter:
             num_ctx=self.context_length,
             top_k=1,
             top_p=1,
-            temperature=0,
+            temperature=temperature,
             verbose=self.verbose,
             primer=primer,
         )
@@ -284,7 +307,19 @@ class StatuteFormatter:
             missing_words, extra_words = check_copy_loss(
                 raw_line, lines_in_string, verbose=self.verbose
             )
-            if missing_words or extra_words:
+
+
+                    
+            for n in range(self.MAX_RETRIES):
+                if not (missing_words or extra_words):
+                    break
+
+                if is_compound_typo(missing_words=missing_words, extra_words=extra_words):
+                    missing_words = []
+                    extra_words = []
+                    break
+
+                print(f"Initial pass failed. Retrying (attempt {n}/{self.MAX_RETRIES})")
                 system_prompt, user_prompt = self._line_proofing_prompt(
                     raw_line=raw_line,
                     output_lines=lines_in_string,
@@ -295,21 +330,20 @@ class StatuteFormatter:
                     print()
                     print("--> LLM output (proofreading pass)")
                 response = self._run_ollama(
-                    system_prompt=system_prompt, user_prompt=user_prompt, primer="Output: "
+                    system_prompt=system_prompt, user_prompt=user_prompt, primer="Output: ", temperature=n * 0.1
                 )
-                proofread_lines_in_string = self.extract_response(response)
+                lines_in_string = self.extract_response(response)
                 
                 missing_words, extra_words = check_copy_loss(
-                    raw_line, proofread_lines_in_string, verbose=self.verbose
+                    raw_line, lines_in_string, verbose=self.verbose
                 )
 
-                if missing_words:
-                    raise ValueError("Missing words in proofread response: ", missing_words)
+            if missing_words:
+                raise ValueError("Missing words in proofread response: ", missing_words)
 
-                if extra_words:
-                    raise ValueError("Extra words in proofread response: ", extra_words)
+            if extra_words:
+                raise ValueError("Extra words in proofread response: ", extra_words)
 
-                lines_in_string = proofread_lines_in_string
 
             for line in lines_in_string:
                 if not line["label"] and not line['text']:
