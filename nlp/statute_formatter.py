@@ -61,8 +61,7 @@ def check_copy_loss(
         (missing, extra): A tuple of lists of missing and extra words.
     """
     parsed_text = " ".join(
-        (item.get("label", "") + " " + item.get("text", "")).strip()
-        for item in parsed
+        (item.get("label", "") + " " + item.get("text", "")).strip() for item in parsed
     ).strip()
 
     missing = find_missing_words(raw, parsed_text)
@@ -100,11 +99,13 @@ def is_compound_typo(missing_words: list[str], extra_words: list[str]) -> bool:
 
     return missing == extra_joined
 
+
 def common_issue(missing_words: list[str], extra_words: list[str]) -> bool:
     if is_compound_typo(missing_words, extra_words):
         return True
-    
+
     return False
+
 
 class StatuteFormatter:
     MAX_RETRIES = 3
@@ -148,38 +149,6 @@ class StatuteFormatter:
                 raise ValueError(f"text field not present in line: {json_item}.")
 
         return json_output
-
-    def _first_draft_missing_text(
-        self, statute: list[str], previous_result: list[dict], missing_words: list[str]
-    ) -> tuple[str, str]:
-        system = textwrap.dedent("""
-            Instructions:
-            You are a statute parsing correction bot.
-            You will be given a statute, it's previous parsed result according to the rules below, and a list of issues with that result. 
-            Your job is to correct the parsed statute.
-
-            Rules:
-            1. Always enclose the parsed lines in a list -> []
-            2. Statutes that do not used labeled lists are parsed as {"label": "", "text": "[text]"}.
-            3. Trailing lines that occur after a labeled section are parsed as {"label": "", "text": "[text]"}.
-            4. It's possible for one line to contain multiple labeled sections. 
-            5. Do not reword the statute. Copy the lines verbatim, including spelling mistakes and punctuation errors.                                
-        """)
-
-        joined = "\n".join(f"{line}" for line in statute)
-        user = textwrap.dedent(f"""
-            Raw statute: 
-            {joined}
-
-            Previous parsing result: 
-            {json.dumps(previous_result)}  
-
-            but missed the following words: 
-            {json.dumps(missing_words)}
-
-            Please write the corrected parsed statute.
-        """)
-        return system, user
 
     def _first_draft_prompt_single_line(self, raw_line: str) -> tuple[str, str]:
         system = textwrap.dedent("""
@@ -303,18 +272,18 @@ class StatuteFormatter:
                 system_prompt=system_prompt, user_prompt=user_prompt, primer="Output: "
             )
             lines_in_string = self.extract_response(response)
-            
+
             missing_words, extra_words = check_copy_loss(
                 raw_line, lines_in_string, verbose=self.verbose
             )
 
-
-                    
             for n in range(self.MAX_RETRIES):
                 if not (missing_words or extra_words):
                     break
 
-                if is_compound_typo(missing_words=missing_words, extra_words=extra_words):
+                if is_compound_typo(
+                    missing_words=missing_words, extra_words=extra_words
+                ):
                     missing_words = []
                     extra_words = []
                     break
@@ -330,10 +299,13 @@ class StatuteFormatter:
                     print()
                     print("--> LLM output (proofreading pass)")
                 response = self._run_ollama(
-                    system_prompt=system_prompt, user_prompt=user_prompt, primer="Output: ", temperature=n * 0.1
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    primer="Output: ",
+                    temperature=n * 0.1,
                 )
                 lines_in_string = self.extract_response(response)
-                
+
                 missing_words, extra_words = check_copy_loss(
                     raw_line, lines_in_string, verbose=self.verbose
                 )
@@ -344,12 +316,11 @@ class StatuteFormatter:
             if extra_words:
                 raise ValueError("Extra words in proofread response: ", extra_words)
 
-
             for line in lines_in_string:
-                if not line["label"] and not line['text']:
+                if not line["label"] and not line["text"]:
                     if self.verbose:
                         print("--> LINE WAS EMPTY")
-                    continue 
+                    continue
                 else:
                     parsed_lines.append(line)
 
@@ -378,7 +349,9 @@ class StatutePostprocessor:
     # goal: (maybe we don't need an llm for this) determin if a line denotes the start of a new version of the statute. Find the latest version, remove all lines from previous versions.
     # version text kind of looks like this "Version 2 (Amended by Laws 2024, HB 3157, c. 267, § 2, eff. November 1, 2024)", but just like everything else in OSCN, are super inconsistent and often have other formats I can't predict.
 
-    def log_unlabeled_line_lengths(self, parsed_statute: list[dict[str, str]]) -> list[int]:
+    def log_unlabeled_line_lengths(
+        self, parsed_statute: list[dict[str, str]]
+    ) -> list[int]:
         lengths = []
 
         for i, item in enumerate(parsed_statute):
