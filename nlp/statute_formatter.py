@@ -328,7 +328,7 @@ class StatuteFormatter:
 
 
 class StatutePostprocessor:
-    """Aggregate the statutes into"""
+    """Aggregate the statutes into structured data"""
 
     def __init__(
         self,
