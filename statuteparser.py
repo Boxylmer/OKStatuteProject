@@ -74,12 +74,13 @@ class StatuteParser:
         return statutes
 
     def _parse_clean(self) -> List[str]:
-        if self.cleaned_json_path.exists():
-            return json.loads(self.cleaned_json_path.read_text(encoding="utf-8"))
+        # if self.cleaned_json_path.exists():
+        #     return json.loads(self.cleaned_json_path.read_text(encoding="utf-8"))
 
         md_text = self._parse_raw()
         break_point = self._extract_first_statute_name(md_text)
         parts = md_text.split(break_point)
+        # TODO splits based on the break point but doesn't include it in the resulting parts.
         assert len(parts) == 3, "Unable to split into header, TOC, contents."
         _, toc, contents = parts
 
