@@ -19,8 +19,6 @@ class StatuteParser:
         lines = self._parse_clean()
         for line in lines: 
             print(line) # starts at 2???
-            return
-        
 
 
     def _compute_md5(self) -> str:
@@ -104,84 +102,84 @@ class StatuteParser:
 
         return statute_bodies
     
-    def _structure_statute_text(self, statute_text: str) -> dict:
-        """
-        Convert a single statute string into structured JSON with nested subsections.
-        Extracts history/notes as a separate field.
-        """
-        import re
+    # def _structure_statute_text(self, statute_text: str) -> dict:
+    #     """
+    #     Convert a single statute string into structured JSON with nested subsections.
+    #     Extracts history/notes as a separate field.
+    #     """
+    #     import re
 
-        # Patterns for subsection labels (A, 1, a, i, etc.)
-        label_patterns = [
-            (r"^[A-Z]\.", "alpha"),
-            (r"^\d+\.", "numeric"),
-            (r"^[a-z]\.", "lower"),
-            (r"^i{1,3}v?|iv|ix|x{1,3}\.", "roman")  # naive roman numerals
-        ]
+    #     # Patterns for subsection labels (A, 1, a, i, etc.)
+    #     label_patterns = [
+    #         (r"^[A-Z]\.", "alpha"),
+    #         (r"^\d+\.", "numeric"),
+    #         (r"^[a-z]\.", "lower"),
+    #         (r"^i{1,3}v?|iv|ix|x{1,3}\.", "roman")  # naive roman numerals
+    #     ]
 
-        history_lines = []
-        body_lines = []
-        in_history = False
+    #     history_lines = []
+    #     body_lines = []
+    #     in_history = False
 
-        for line in statute_text.strip().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            if re.match(r"^(Added|Amended|Repealed|NOTE:)", line):
-                in_history = True
-            if in_history:
-                history_lines.append(line)
-            else:
-                body_lines.append(line)
+    #     for line in statute_text.strip().splitlines():
+    #         line = line.strip()
+    #         if not line:
+    #             continue
+    #         if re.match(r"^(Added|Amended|Repealed|NOTE:)", line):
+    #             in_history = True
+    #         if in_history:
+    #             history_lines.append(line)
+    #         else:
+    #             body_lines.append(line)
 
-        # Helper to normalize labels (remove dot or parens)
-        def normalize_label(raw):
-            return raw.strip("().").strip()
+    #     # Helper to normalize labels (remove dot or parens)
+    #     def normalize_label(raw):
+    #         return raw.strip("().").strip()
 
-        # Build tree
-        root = {"label": "", "text": "", "subsections": []}
-        stack = [root]
+    #     # Build tree
+    #     root = {"label": "", "text": "", "subsections": []}
+    #     stack = [root]
 
-        for line in body_lines:
-            label = None
-            text = line
+    #     for line in body_lines:
+    #         label = None
+    #         text = line
 
-            for pattern, _ in label_patterns:
-                match = re.match(pattern, line)
-                if match:
-                    label = normalize_label(match.group())
-                    text = line[match.end():].strip()
-                    break
+    #         for pattern, _ in label_patterns:
+    #             match = re.match(pattern, line)
+    #             if match:
+    #                 label = normalize_label(match.group())
+    #                 text = line[match.end():].strip()
+    #                 break
 
-            if label is None:
-                # continuation of previous text
-                stack[-1]["text"] += " " + line
-                continue
+    #         if label is None:
+    #             # continuation of previous text
+    #             stack[-1]["text"] += " " + line
+    #             continue
 
-            # Determine depth
-            if re.match(r"^[A-Z]$", label):
-                level = 1
-            elif re.match(r"^\d+$", label):
-                level = 2
-            elif re.match(r"^[a-z]$", label):
-                level = 3
-            elif re.match(r"^i{1,3}v?$|^x{1,3}$", label):  # roman
-                level = 4
-            else:
-                level = len(stack)  # fallback
+    #         # Determine depth
+    #         if re.match(r"^[A-Z]$", label):
+    #             level = 1
+    #         elif re.match(r"^\d+$", label):
+    #             level = 2
+    #         elif re.match(r"^[a-z]$", label):
+    #             level = 3
+    #         elif re.match(r"^i{1,3}v?$|^x{1,3}$", label):  # roman
+    #             level = 4
+    #         else:
+    #             level = len(stack)  # fallback
 
-            # Truncate or extend stack to the correct depth
-            stack = stack[:level]
-            new_node = {"label": label, "text": text, "subsections": []}
-            stack[-1]["subsections"].append(new_node)
-            stack.append(new_node)
+    #         # Truncate or extend stack to the correct depth
+    #         stack = stack[:level]
+    #         new_node = {"label": label, "text": text, "subsections": []}
+    #         stack[-1]["subsections"].append(new_node)
+    #         stack.append(new_node)
 
-        return {
-            "label": root["label"],
-            "text": root["text"],
-            "subsections": root["subsections"],
-            "history": "\n".join(history_lines).strip()
-        }
+    #     return {
+    #         "label": root["label"],
+    #         "text": root["text"],
+    #         "subsections": root["subsections"],
+    #         "history": "\n".join(history_lines).strip()
+    #     }
 
 
 
