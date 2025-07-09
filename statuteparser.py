@@ -16,13 +16,10 @@ class StatuteParser:
         self.cleaned_json_path = self.cache_dir / f"split_{self.md5_hash}.json"
 
     def parse(self):
-        lines = self._parse_clean()
-        for line in lines: 
-            print(line) # starts at 2???
-            return 
+        statutes = self._parse_clean()
+        print(statutes[0]) # Debug stub.
 
-
-        return lines 
+        return statutes 
 
 
     def _compute_md5(self) -> str:
@@ -82,9 +79,11 @@ class StatuteParser:
         md_text = self._parse_raw()
         break_point = self._extract_first_statute_name(md_text)
         parts = md_text.split(break_point)
-        # TODO splits based on the break point but doesn't include it in the resulting parts.
         assert len(parts) == 3, "Unable to split into header, TOC, contents."
         _, toc, contents = parts
+        # Add the breaking character back to the toc and contents.
+        toc = break_point + toc
+        contents = break_point + contents
 
         cleaned = self._clean_markdown_statute_text(contents)
         statute_chunks = self._split_statutes_by_header(cleaned)
