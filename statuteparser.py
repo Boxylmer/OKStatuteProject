@@ -19,6 +19,10 @@ class StatuteParser:
         lines = self._parse_clean()
         for line in lines: 
             print(line) # starts at 2???
+            return 
+
+
+        return lines 
 
 
     def _compute_md5(self) -> str:
