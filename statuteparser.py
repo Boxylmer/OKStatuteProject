@@ -7,6 +7,9 @@ import pymupdf4llm  # type: ignore
 
 
 class StatuteParser:
+    STATUTE_HEADER_RE = re.compile(r"^§[^\s]+-[^\s]+\.", re.MULTILINE)
+    HISTORICAL_DATA_STARTERS = ("Added by Laws", "Laws ", "R.L.")
+
     def __init__(self, pdf_path: Path, cache_dir: Path = Path("cache")):
         self.pdf_path = Path(pdf_path)
         self.cache_dir = cache_dir
@@ -16,11 +19,11 @@ class StatuteParser:
         self.cleaned_json_path = self.cache_dir / f"split_{self.md5_hash}.json"
 
     def parse(self):
-        statutes = self._parse_clean()
-        print(statutes[0]) # Debug stub.
+        clean_statute_info = self._parse_statute_pdf_text()
+        # statute_components = [self._segment_statute_text(s_text, toc_entry) for s_text, toc_entry in zip(statute_texts, statute_names)]
+        # print(statute_texts[5])  # Debug stub.
 
-        return statutes 
-
+        return clean_statute_info
 
     def _compute_md5(self) -> str:
         hasher = hashlib.md5()
@@ -29,7 +32,7 @@ class StatuteParser:
                 hasher.update(chunk)
         return hasher.hexdigest()
 
-    def _parse_raw(self) -> str:
+    def _parse_pdf_to_text(self) -> str:
         if self.raw_markdown_path.exists():
             return self.raw_markdown_path.read_text(encoding="utf-8")
         text = pymupdf4llm.to_markdown(str(self.pdf_path), use_glyphs=True)
@@ -48,7 +51,20 @@ class StatuteParser:
                 return match.group(1)
         raise ValueError("Could not find a statute header in the TOC.")
 
-    def _clean_markdown_statute_text(self, markdown_text: str) -> str:
+    @staticmethod
+    def _split_raw_pdf_text_into_components(raw_pdf_text: str):
+        break_point = StatuteParser._extract_first_statute_name(raw_pdf_text)
+        parts = raw_pdf_text.split(break_point)
+        assert len(parts) == 3, "Unable to split into header, TOC, contents."
+        header, toc, contents = parts
+        # Add the breaking character back to the toc and contents.
+        toc = break_point + toc
+        contents = break_point + contents
+        return header, toc, contents
+
+    @staticmethod
+    def _clean_statute_text_pages(markdown_text: str) -> str:
+        "Take the raw pages from the PDF and strip out formatting + extraneous information like headers and footers."
         cleaned_lines = []
         footer_pattern = re.compile(r"^Oklahoma Statutes - Title \d+\. .* Page \d+$")
         for line in markdown_text.splitlines():
@@ -59,52 +75,145 @@ class StatuteParser:
             cleaned_lines.append(line)
         return "\n".join(cleaned_lines)
 
-    def _split_statutes_by_header(self, md_text: str) -> List[Tuple[str, str]]:
-        STATUTE_HEADER_RE = re.compile(r"^§[^\s]+-[^\s]+\.", re.MULTILINE)
-        matches = list(STATUTE_HEADER_RE.finditer(md_text))
+    @staticmethod
+    def _split_statute_document_by_header(
+        clean_statute_text: str,
+    ) -> List[Tuple[str, str]]:
+        """
+        Given a clean text with statute information, split the text by the start of each statute occurance and extract a title and body for each.
+        returns: list[(title, raw_body), ...]
+        """
+
+        matches = list(StatuteParser.STATUTE_HEADER_RE.finditer(clean_statute_text))
         statutes = []
 
         for i, match in enumerate(matches):
             start = match.start()
-            end = matches[i + 1].start() if i + 1 < len(matches) else len(md_text)
-            header_line = match.group().strip()
-            body = md_text[start:end].strip()
-            statutes.append((header_line, body))
+            end = (
+                matches[i + 1].start()
+                if i + 1 < len(matches)
+                else len(clean_statute_text)
+            )
+            title = match.group().strip()
+            raw_statute = clean_statute_text[start:end].strip()
+            statutes.append((title, raw_statute))
         return statutes
 
-    def _parse_clean(self) -> List[str]:
-        # if self.cleaned_json_path.exists():
-        #     return json.loads(self.cleaned_json_path.read_text(encoding="utf-8"))
+    @staticmethod
+    def _clean_toc_name(raw_toc_text: str, title_text: str):
+        "Remove ellipses, title, and page numbers from the TOC entry."
+        # Forcefully collapse newlines and multiple spaces
+        toc_entry = re.sub(r"\s+", " ", raw_toc_text).strip()
 
-        md_text = self._parse_raw()
-        break_point = self._extract_first_statute_name(md_text)
-        parts = md_text.split(break_point)
-        assert len(parts) == 3, "Unable to split into header, TOC, contents."
-        _, toc, contents = parts
-        # Add the breaking character back to the toc and contents.
-        toc = break_point + toc
-        contents = break_point + contents
+        # Mercilessly remove trailing dots + optional page number
+        toc_entry = re.sub(r"\.{2,}\s*\d+\s*$", "", toc_entry).strip()
 
-        cleaned = self._clean_markdown_statute_text(contents)
-        statute_chunks = self._split_statutes_by_header(cleaned)
-        statute_bodies = [chunk[1] for chunk in statute_chunks]
+        # Destroy, inhumanely, the title text
+        if not toc_entry.startswith(title_text):
+            raise ValueError(
+                f"Statute number '{title_text}' not found at start of '{toc_entry}'"
+            )
+
+        toc_entry = toc_entry[len(title_text) :].strip()
+        return toc_entry
+
+    @staticmethod
+    def _clean_statute_body(
+        raw_statute_body: str, statute_name: str, statute_title: str
+    ) -> tuple[str, str]:
+        "Remove the name and title from the statute body and split the body into the contents and historical data."
+        
+        # Remove title
+        if not raw_statute_body.startswith(statute_title):
+            raise ValueError(
+                f"Statute number '{statute_title}' not found at start of '{raw_statute_body}'"
+            )
+        statute_body = raw_statute_body[len(statute_title) :].strip()
+        
+        # print(statute_body)
+
+        # Remove name
+        if not statute_body.startswith(statute_name):
+            raise ValueError(
+                f"Statute number '{statute_name}' not found at start of '{statute_body}'"
+            )
+        statute_body = statute_body[len(statute_name) :].strip()
+          
+        # print(statute_body)
+
+        historical_pattern = re.compile(
+            r"(?m)^(" + "|".join(re.escape(s) for s in StatuteParser.HISTORICAL_DATA_STARTERS) + r")"
+        )
+
+        match = historical_pattern.search(statute_body)
+        if match:
+            split_index = match.start()
+            statute_body = statute_body[:split_index].rstrip()
+            historical_data = statute_body[split_index:].lstrip()
+        else:
+            statute_body = statute_body
+            historical_data = ""
+
+        print(statute_body)
+        print("...")
+        print(historical_data)
+        print("__________________________")
+
+        return statute_body, historical_data
+
+
+    def _parse_statute_pdf_text(self) -> list[tuple[str, str, str]]:
+        """
+        Get the raw statute pdf text and segment out the text, title, and name of each statute.
+        Verifies that all statutes have been found via the table of contents (TOC).
+
+        Returns: [(statute_text, statute_name, statute_title), ...]
+        """
+
+        md_text = self._parse_pdf_to_text()
+
+        _, raw_toc, raw_statute_contents = self._split_raw_pdf_text_into_components(
+            md_text
+        )
+
+        contents_cleaned = self._clean_statute_text_pages(raw_statute_contents)
+        statute_chunks = self._split_statute_document_by_header(contents_cleaned)
+        raw_statute_bodies = [chunk[1] for chunk in statute_chunks]
+
         self.cleaned_json_path.write_text(
-            json.dumps(statute_bodies, indent=2), encoding="utf-8"
+            json.dumps(raw_statute_bodies, indent=2), encoding="utf-8"
         )
 
         # Consistency check: TOC headers match actual headers
-        toc_cleaned = self._clean_markdown_statute_text(toc)
-        toc_headers = [h[0] for h in self._split_statutes_by_header(toc_cleaned)]
+        toc_cleaned = self._clean_statute_text_pages(raw_toc)
+        toc_headers = [h for h in self._split_statute_document_by_header(toc_cleaned)]
+        toc_titles = [h[0] for h in toc_headers]
+        toc_names = [h[1] for h in toc_headers]
         content_headers = [h[0] for h in statute_chunks]
-        missing = [h for h in toc_headers if h not in content_headers]
+        missing = [h for h in toc_titles if h not in content_headers]
         if missing:
             print(f"⚠️ Warning: {len(missing)} TOC headers not found in parsed content.")
             for m in missing[:5]:
                 print(f"  Missing: {m}")
             raise ValueError("Statute had missing content")
 
-        return statute_bodies
-    
+        clean_names = [
+            self._clean_toc_name(name, title)
+            for name, title in zip(toc_names, toc_titles)
+        ]
+
+        clean_statute_bodies_and_history = [
+            self._clean_statute_body(raw_body, name, title)
+            for raw_body, name, title in zip(
+                raw_statute_bodies, clean_names, toc_titles
+            )
+        ]
+
+        # clean_bodies = []
+        # clean_historical_data = []
+
+        return list(zip(raw_statute_bodies, clean_names, toc_titles))
+
     # def _structure_statute_text(self, statute_text: str) -> dict:
     #     """
     #     Convert a single statute string into structured JSON with nested subsections.
@@ -183,7 +292,6 @@ class StatuteParser:
     #         "subsections": root["subsections"],
     #         "history": "\n".join(history_lines).strip()
     #     }
-
 
 
 if __name__ == "__main__":
