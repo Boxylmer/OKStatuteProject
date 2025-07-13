@@ -122,7 +122,9 @@ class StatuteParser:
         raw_statute_body: str, statute_name: str, statute_title: str
     ) -> tuple[str, str]:
         "Remove the name and title from the statute body and split the body into the contents and historical data."
-        
+        print("________________________")
+        print(raw_statute_body)
+        print("...")
         # Remove title
         if not raw_statute_body.startswith(statute_title):
             raise ValueError(
@@ -130,17 +132,19 @@ class StatuteParser:
             )
         statute_body = raw_statute_body[len(statute_title) :].strip()
         
-        # print(statute_body)
-
+        print(statute_body)
+        print("...")
         # Remove name
+        # TODO newlines in the statute_body cause the statute_name to not work as a key for removal. 
+        # -> need some strategy which shouldn't be a lift but it's 11:40PM and I'm trying to be done for the day.   
         if not statute_body.startswith(statute_name):
             raise ValueError(
-                f"Statute number '{statute_name}' not found at start of '{statute_body}'"
+                f"Statute name '{statute_name}' not found at start of statute body (below) \n'{statute_body}'"
             )
         statute_body = statute_body[len(statute_name) :].strip()
-          
-        # print(statute_body)
-
+        
+        print(statute_body)
+        print("...")
         historical_pattern = re.compile(
             r"(?m)^(" + "|".join(re.escape(s) for s in StatuteParser.HISTORICAL_DATA_STARTERS) + r")"
         )
@@ -156,9 +160,9 @@ class StatuteParser:
 
         print(statute_body)
         print("...")
-        print(historical_data)
-        print("__________________________")
-
+        # print(historical_data)
+        # print("__________________________")
+        print("________________________")
         return statute_body, historical_data
 
 
