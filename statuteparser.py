@@ -6,6 +6,45 @@ from typing import List, Tuple
 import pymupdf4llm  # type: ignore
 
 
+def match_string_prefix_fuzzy(body: str, prefix: str):
+    """
+    Find the line-up index of a prefix in a body of text, ignoring whitespace, newlines, etc.
+    The index returned is the ending position of the prefix string for the *body* text. 
+    E.g., 
+    Body: " The 
+            quick brow
+            n fox jumped over the lazy dog"
+    Target: "the quick brown 
+    Result: 15
+    
+    """
+    b_idx = 0 
+    p_idx = 0 
+    buffer = ''
+    while b_idx < len(body) and p_idx < len(prefix):
+        if body[b_idx].isspace():
+            buffer += body[b_idx]
+            b_idx += 1
+            continue
+        if prefix[p_idx].isspace():
+            while p_idx < len(prefix) and prefix[p_idx].isspace():
+                p_idx += 1
+            while b_idx < len(body) and body[b_idx].isspace():
+                buffer += body[b_idx]
+                b_idx += 1
+            continue
+        if body[b_idx] == prefix[p_idx]:
+            buffer += body[b_idx]
+            b_idx += 1
+            p_idx += 1
+        else:
+            return None # no match, # TODO maybe raise an error instead?
+    if p_idx == len(prefix):
+        return b_idx  
+    return None # prefix / body had total line-up, # TODO maybe another error or just return an empty string? Not sure yet. 
+
+    # TODO: Not sure what I should be doing to make this more readable. Kind of bog standard fuzzy string matching logic, but very much not pythonic. 
+   
 class StatuteParser:
     STATUTE_HEADER_RE = re.compile(r"^§[^\s]+-[^\s]+\.", re.MULTILINE)
     HISTORICAL_DATA_STARTERS = ("Added by Laws", "Laws ", "R.L.")
@@ -125,6 +164,7 @@ class StatuteParser:
         print("________________________")
         print(raw_statute_body)
         print("...")
+
         # Remove title
         if not raw_statute_body.startswith(statute_title):
             raise ValueError(
@@ -134,9 +174,11 @@ class StatuteParser:
         
         print(statute_body)
         print("...")
+        
         # Remove name
         # TODO newlines in the statute_body cause the statute_name to not work as a key for removal. 
         # -> need some strategy which shouldn't be a lift but it's 11:40PM and I'm trying to be done for the day.   
+        
         if not statute_body.startswith(statute_name):
             raise ValueError(
                 f"Statute name '{statute_name}' not found at start of statute body (below) \n'{statute_body}'"
