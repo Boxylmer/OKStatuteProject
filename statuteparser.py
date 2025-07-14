@@ -6,7 +6,7 @@ from typing import List, Tuple
 import pymupdf4llm  # type: ignore
 
 
-def match_string_prefix_fuzzy(body: str, prefix: str):
+def match_string_prefix_fuzzy(body: str, prefix: str) -> int | None:
     """
     Find the line-up index of a prefix in a body of text, ignoring whitespace, newlines, etc.
     The index returned is the ending position of the prefix string for the *body* text. 
@@ -18,36 +18,63 @@ def match_string_prefix_fuzzy(body: str, prefix: str):
     Result: 15
     
     """
-    b_idx = 0 
-    p_idx = 0 
-    buffer = ''
+    b_idx = 0
+    p_idx = 0
+
+    def normalize(c):
+        return c.lower() if c.isalnum() else None
+
     while b_idx < len(body) and p_idx < len(prefix):
+        # Skip whitespace in body
         if body[b_idx].isspace():
-            buffer += body[b_idx]
             b_idx += 1
             continue
+
+        # Skip whitespace in prefix
         if prefix[p_idx].isspace():
-            while p_idx < len(prefix) and prefix[p_idx].isspace():
-                p_idx += 1
-            while b_idx < len(body) and body[b_idx].isspace():
-                buffer += body[b_idx]
-                b_idx += 1
-            continue
-        if body[b_idx] == prefix[p_idx]:
-            buffer += body[b_idx]
-            b_idx += 1
             p_idx += 1
-        else:
-            return None # no match, # TODO maybe raise an error instead?
-    if p_idx == len(prefix):
-        return b_idx  
-    return None # prefix / body had total line-up, # TODO maybe another error or just return an empty string? Not sure yet. 
+            continue
+
+        # Skip non-alphanumerics in both
+        b_char = normalize(body[b_idx])
+        while b_char is None and b_idx < len(body):
+            b_idx += 1
+            if b_idx < len(body):
+                b_char = normalize(body[b_idx])
+
+        p_char = normalize(prefix[p_idx])
+        while p_char is None and p_idx < len(prefix):
+            p_idx += 1
+            if p_idx < len(prefix):
+                p_char = normalize(prefix[p_idx])
+
+        # If either index is now out of range, break
+        if p_idx >= len(prefix):
+            break
+        if b_idx >= len(body):
+            break
+
+        # Compare normalized characters
+        if b_char != p_char:
+            return None
+
+        # Advance
+        b_idx += 1
+        p_idx += 1
+
+    # Confirm full prefix consumed
+    while p_idx < len(prefix):
+        if normalize(prefix[p_idx]) is not None:
+            return None
+        p_idx += 1
+
+    return b_idx # prefix / body had total line-up, # TODO maybe another error or just return an empty string? Not sure yet. 
 
     # TODO: Not sure what I should be doing to make this more readable. Kind of bog standard fuzzy string matching logic, but very much not pythonic. 
    
 class StatuteParser:
     STATUTE_HEADER_RE = re.compile(r"^§[^\s]+-[^\s]+\.", re.MULTILINE)
-    HISTORICAL_DATA_STARTERS = ("Added by Laws", "Laws ", "R.L.")
+    HISTORICAL_DATA_STARTERS = ("Added by Laws", "Amended by Laws", "Repealed by Laws", "Laws ", "R.L.")
 
     def __init__(self, pdf_path: Path, cache_dir: Path = Path("cache")):
         self.pdf_path = Path(pdf_path)
@@ -161,9 +188,9 @@ class StatuteParser:
         raw_statute_body: str, statute_name: str, statute_title: str
     ) -> tuple[str, str]:
         "Remove the name and title from the statute body and split the body into the contents and historical data."
-        print("________________________")
-        print(raw_statute_body)
-        print("...")
+        # print("________________________")
+        # print(raw_statute_body)
+        # print("...")
 
         # Remove title
         if not raw_statute_body.startswith(statute_title):
@@ -172,21 +199,19 @@ class StatuteParser:
             )
         statute_body = raw_statute_body[len(statute_title) :].strip()
         
-        print(statute_body)
-        print("...")
+        # print(statute_body)
+        # print("...")
         
-        # Remove name
-        # TODO newlines in the statute_body cause the statute_name to not work as a key for removal. 
-        # -> need some strategy which shouldn't be a lift but it's 11:40PM and I'm trying to be done for the day.   
-        
-        if not statute_body.startswith(statute_name):
+        match_end = match_string_prefix_fuzzy(body=statute_body, prefix=statute_name)
+        if match_end is None:
             raise ValueError(
-                f"Statute name '{statute_name}' not found at start of statute body (below) \n'{statute_body}'"
+                f"Statute name '{statute_name}' not found at start of statute body (fuzzy match).\n'{statute_body}'"
             )
-        statute_body = statute_body[len(statute_name) :].strip()
+
+        statute_body = statute_body[match_end:].lstrip()
         
-        print(statute_body)
-        print("...")
+        # print(statute_body)
+        # print("...")
         historical_pattern = re.compile(
             r"(?m)^(" + "|".join(re.escape(s) for s in StatuteParser.HISTORICAL_DATA_STARTERS) + r")"
         )
@@ -194,26 +219,26 @@ class StatuteParser:
         match = historical_pattern.search(statute_body)
         if match:
             split_index = match.start()
-            statute_body = statute_body[:split_index].rstrip()
             historical_data = statute_body[split_index:].lstrip()
+            statute_body = statute_body[:split_index].rstrip()
         else:
             statute_body = statute_body
             historical_data = ""
 
-        print(statute_body)
-        print("...")
+        # print(statute_body)
+        # print("...")
         # print(historical_data)
         # print("__________________________")
-        print("________________________")
+        # print("________________________")
         return statute_body, historical_data
 
 
-    def _parse_statute_pdf_text(self) -> list[tuple[str, str, str]]:
+    def _parse_statute_pdf_text(self) -> list[tuple[str, str, str, str]]:
         """
         Get the raw statute pdf text and segment out the text, title, and name of each statute.
         Verifies that all statutes have been found via the table of contents (TOC).
 
-        Returns: [(statute_text, statute_name, statute_title), ...]
+        Returns: [(statute_title, statute_name, statute_body, statute_history), ...]
         """
 
         md_text = self._parse_pdf_to_text()
@@ -255,10 +280,12 @@ class StatuteParser:
             )
         ]
 
-        # clean_bodies = []
-        # clean_historical_data = []
+        unstructured_clean_bodies = [body for body, _ in clean_statute_bodies_and_history]
+        clean_historical_data = [history for _, history in clean_statute_bodies_and_history]
 
-        return list(zip(raw_statute_bodies, clean_names, toc_titles))
+        unstructured_clean_bodies, clean_historical_data
+
+        return list(zip(toc_titles, clean_names, unstructured_clean_bodies, clean_historical_data))
 
     # def _structure_statute_text(self, statute_text: str) -> dict:
     #     """
@@ -340,10 +367,51 @@ class StatuteParser:
     #     }
 
 
+# Too lazy to structure this as a real package right now so am putting test functions here to eventually become unit tests
+def test_match_string_prefix_fuzzy():
+    # exact match
+    assert match_string_prefix_fuzzy("The quick brown fox", "The quick") == 9
+
+    # \n and spaces in body
+    body = "The\n   quick\nbrown fox"
+    prefix = "The quick brown"
+    assert match_string_prefix_fuzzy(body, prefix) == 18
+
+    # nospace in body
+    body = "Thequickbrownfox"
+    prefix = "The quick brown"
+    assert match_string_prefix_fuzzy(body, prefix) == 13
+
+    # lots of bad spacing
+    body = "  The \n quick\tbrown   fox"
+    prefix = " The  quick brown"
+    assert match_string_prefix_fuzzy(body, prefix) == 19
+
+    # misalignment (see #TODO in func. 
+    assert match_string_prefix_fuzzy("Hello world", "Hello Mars") is None
+
+    # prefix longer than body
+    assert match_string_prefix_fuzzy("Short", "Short but longer") is None
+
+    # exact match
+    assert match_string_prefix_fuzzy("Statute Title\nStatute Name\nRest of text", "Statute Title Statute Name") == 26
+
+    print("All fuzzy string matching tests passed.")
+
 if __name__ == "__main__":
+    test_match_string_prefix_fuzzy()
     # parse title 21
     statute_path = Path("data") / "statute"
     parser = StatuteParser(
         pdf_path=statute_path / "2024-21.pdf", cache_dir=statute_path / "cache"
     )
     res = parser.parse()
+
+    for title, name, body, history in res:
+        if history.strip() == "":
+            print(f"history for title {title}: \"{history}\"")
+            print(name)
+            print(body)
+
+
+
