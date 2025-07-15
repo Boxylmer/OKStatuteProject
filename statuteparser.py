@@ -2,7 +2,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
-from typing import List, Dict, Tuple, Union
+from typing import List, Dict, Tuple, Union, Any
 import pymupdf4llm  # type: ignore
 
 
@@ -395,6 +395,100 @@ class StatuteParser:
     #     }
 
 
+class StatuteStructurer:
+    """
+    Break a statute body into a structured format.
+
+    Detection finds the first of the MARKER_PATTERNS and holds on to it for that "level"
+    I have no idea if the other staute titles follow this format, 
+        if you use something other than title 21 and it breaks, I'm sorry.
+        We definitely need a ton of unittests on this thing. 
+
+    Level Header Pattern Order:
+        1. Capital Letters: A., B., C., ...
+        2. Numbers: 1., 2., 3., ...
+        3. Lowercase Letters: a., b., c., ...
+        # TODO maybe we will need i, ii, ...? This is harder and I didn't want to waste time on it yet. 
+    """
+
+    MARKER_PATTERNS = [
+        (r"^[ ]{0,3}([A-Z]\.)", "alpha_upper"),   # A. B. C.
+        (r"^[ ]{0,3}(\d+\.)", "numeric"),        # 1. 2. 3.
+        (r"^[ ]{0,3}([a-z]\.)", "alpha_lower"),   # a. b. c.
+    ]
+
+    def __init__(self):
+        self.structure = []
+        self.stack = []
+        self.level_order = [] 
+
+    def structure_statute(self, text: str) -> List[Dict[str, Any]]:
+        lines = text.strip().splitlines()
+        for line in lines:
+            label, label_level, content = self._extract_label(line)
+            if label:
+                self._push_section(label, label_level, content)
+            else:
+                self._append_to_last(line)
+        return self.structure
+
+    def _extract_label(self, line: str) -> tuple[str, str, str]: # [label name (A, 1, etc)], [label level (1, 2, 3)], [line body]
+        for pattern, label_type in self.MARKER_PATTERNS:
+            match = re.match(pattern, line)
+            if match:
+                label = match.group(1)
+                content = line[match.end():].strip()
+                if label_type not in self.level_order:
+                    self.level_order.append(label_type)
+                return label, label_type, content
+        return '', '', line.strip()
+
+    def _push_section(self, label: str, label_type: str, content: str):
+        level = self.level_order.index(label_type)
+        section = {"label": label, "text": content, "subsections": []}
+
+        while len(self.stack) > level:
+            self.stack.pop()
+
+        if not self.stack:
+            self.structure.append(section)
+        else:
+            self.stack[-1]["subsections"].append(section)
+
+        self.stack.append(section)
+
+    def _append_to_last(self, line: str):
+        if self.stack:
+            self.stack[-1]["text"] += " " + line.strip()
+        elif self.structure:
+            self.structure[-1]["text"] += " " + line.strip()
+        else:
+            self.structure.append({"label": "", "text": line.strip(), "subsections": []})
+
+    def _check_consistency(self, sections: List[Dict[str, Any]]):
+        "Did I actually get something in the right order? I.e., A->B->1->2->C->1->2..."
+        for level_sections in [sections]:
+            self._check_recursive(level_sections)
+
+    def _check_recursive(self, sections: List[Dict[str, Any]]):
+        # I don't know a better way to do this than a virtually unreadable recursion function 
+        # TODO find out if best practice is to put this function inside _check_consistency
+
+        # TODO this currently fails. search "No corporation or labor union may" and see things start with 2 and progress without nesting
+        labels = [s["label"] for s in sections if s["label"]]
+        if all(label.endswith(".") for label in labels):
+            base_labels = [label[:-1] for label in labels]
+            if all(b.isdigit() for b in base_labels):
+                nums = list(map(int, base_labels))
+                if nums != sorted(nums):
+                    raise ValueError(f"Inconsistent numeric label order: {labels}")
+            elif all(len(b) == 1 and b.isalpha() for b in base_labels):
+                ords = list(map(lambda c: ord(c.lower()), base_labels))
+                if ords != sorted(ords):
+                    raise ValueError(f"Inconsistent alphabetic label order: {labels}")
+        for section in sections:
+            self._check_recursive(section["subsections"])
+
 
 # Too lazy to structure this as a real package right now so am putting test functions here to eventually become unit tests
 def test_match_string_prefix_fuzzy():
@@ -446,4 +540,5 @@ if __name__ == "__main__":
         print(f"Title {title}:")
         print(body)
         print("")
+        print(StatuteStructurer().structure_statute(body))
         print("________________")
