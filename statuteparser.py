@@ -530,7 +530,7 @@ def test_match_string_prefix_fuzzy():
 if __name__ == "__main__":
     test_match_string_prefix_fuzzy()
     # parse title 21
-    statute_path = Path("data") / "statute"
+    statute_path = Path("docs") / "statutes"
     parser = StatuteParser(
         pdf_path=statute_path / "2024-21.pdf", cache_dir=statute_path / "cache"
     )
