@@ -2,21 +2,21 @@ import hashlib
 import json
 from pathlib import Path
 import re
-from typing import List, Tuple
+from typing import List, Dict, Tuple, Union
 import pymupdf4llm  # type: ignore
 
 
 def match_string_prefix_fuzzy(body: str, prefix: str) -> int | None:
     """
     Find the line-up index of a prefix in a body of text, ignoring whitespace, newlines, etc.
-    The index returned is the ending position of the prefix string for the *body* text. 
-    E.g., 
-    Body: " The 
+    The index returned is the ending position of the prefix string for the *body* text.
+    E.g.,
+    Body: " The
             quick brow
             n fox jumped over the lazy dog"
-    Target: "the quick brown 
+    Target: "the quick brown
     Result: 15
-    
+
     """
     b_idx = 0
     p_idx = 0
@@ -68,13 +68,22 @@ def match_string_prefix_fuzzy(body: str, prefix: str) -> int | None:
             return None
         p_idx += 1
 
-    return b_idx # prefix / body had total line-up, # TODO maybe another error or just return an empty string? Not sure yet. 
+    return b_idx  # prefix / body had total line-up, # TODO maybe another error or just return an empty string? Not sure yet.
 
-    # TODO: Not sure what I should be doing to make this more readable. Kind of bog standard fuzzy string matching logic, but very much not pythonic. 
-   
+    # TODO: Not sure what I should be doing to make this more readable. Kind of bog standard fuzzy string matching logic, but very much not pythonic.
+
+
 class StatuteParser:
     STATUTE_HEADER_RE = re.compile(r"^§[^\s]+-[^\s]+\.", re.MULTILINE)
-    HISTORICAL_DATA_STARTERS = ("Added by Laws", "Amended by Laws", "Repealed by Laws", "Laws ", "R.L.")
+    HISTORICAL_DATA_STARTERS = (
+        "Added by Laws",
+        "Amended by Laws",
+        "Added by State Question",
+        # "Renumbered as",
+        # "Repealed by Laws",
+        "Laws ",
+        "R.L.",
+    )
 
     def __init__(self, pdf_path: Path, cache_dir: Path = Path("cache")):
         self.pdf_path = Path(pdf_path)
@@ -142,7 +151,7 @@ class StatuteParser:
         return "\n".join(cleaned_lines)
 
     @staticmethod
-    def _split_statute_document_by_header(
+    def _split_title_from_statute_data(
         clean_statute_text: str,
     ) -> List[Tuple[str, str]]:
         """
@@ -188,6 +197,13 @@ class StatuteParser:
         raw_statute_body: str, statute_name: str, statute_title: str
     ) -> tuple[str, str]:
         "Remove the name and title from the statute body and split the body into the contents and historical data."
+
+        if statute_name.lower().strip().startswith("repealed"):
+            return "repealed", raw_statute_body
+
+        if statute_name.lower().strip().startswith("renumbered"):
+            return "renumbered", raw_statute_body
+
         # print("________________________")
         # print(raw_statute_body)
         # print("...")
@@ -198,10 +214,10 @@ class StatuteParser:
                 f"Statute number '{statute_title}' not found at start of '{raw_statute_body}'"
             )
         statute_body = raw_statute_body[len(statute_title) :].strip()
-        
+
         # print(statute_body)
         # print("...")
-        
+
         match_end = match_string_prefix_fuzzy(body=statute_body, prefix=statute_name)
         if match_end is None:
             raise ValueError(
@@ -209,11 +225,13 @@ class StatuteParser:
             )
 
         statute_body = statute_body[match_end:].lstrip()
-        
+
         # print(statute_body)
         # print("...")
         historical_pattern = re.compile(
-            r"(?m)^(" + "|".join(re.escape(s) for s in StatuteParser.HISTORICAL_DATA_STARTERS) + r")"
+            r"(?m)^[ \t]*("
+            + "|".join(re.escape(s) for s in StatuteParser.HISTORICAL_DATA_STARTERS)
+            + r")"
         )
 
         match = historical_pattern.search(statute_body)
@@ -232,7 +250,6 @@ class StatuteParser:
         # print("________________________")
         return statute_body, historical_data
 
-
     def _parse_statute_pdf_text(self) -> list[tuple[str, str, str, str]]:
         """
         Get the raw statute pdf text and segment out the text, title, and name of each statute.
@@ -248,7 +265,7 @@ class StatuteParser:
         )
 
         contents_cleaned = self._clean_statute_text_pages(raw_statute_contents)
-        statute_chunks = self._split_statute_document_by_header(contents_cleaned)
+        statute_chunks = self._split_title_from_statute_data(contents_cleaned)
         raw_statute_bodies = [chunk[1] for chunk in statute_chunks]
 
         self.cleaned_json_path.write_text(
@@ -257,7 +274,7 @@ class StatuteParser:
 
         # Consistency check: TOC headers match actual headers
         toc_cleaned = self._clean_statute_text_pages(raw_toc)
-        toc_headers = [h for h in self._split_statute_document_by_header(toc_cleaned)]
+        toc_headers = [h for h in self._split_title_from_statute_data(toc_cleaned)]
         toc_titles = [h[0] for h in toc_headers]
         toc_names = [h[1] for h in toc_headers]
         content_headers = [h[0] for h in statute_chunks]
@@ -280,12 +297,23 @@ class StatuteParser:
             )
         ]
 
-        unstructured_clean_bodies = [body for body, _ in clean_statute_bodies_and_history]
-        clean_historical_data = [history for _, history in clean_statute_bodies_and_history]
+        unstructured_clean_bodies = [
+            body for body, _ in clean_statute_bodies_and_history
+        ]
+        clean_historical_data = [
+            history for _, history in clean_statute_bodies_and_history
+        ]
 
         unstructured_clean_bodies, clean_historical_data
 
-        return list(zip(toc_titles, clean_names, unstructured_clean_bodies, clean_historical_data))
+        return list(
+            zip(
+                toc_titles,
+                clean_names,
+                unstructured_clean_bodies,
+                clean_historical_data,
+            )
+        )
 
     # def _structure_statute_text(self, statute_text: str) -> dict:
     #     """
@@ -367,6 +395,7 @@ class StatuteParser:
     #     }
 
 
+
 # Too lazy to structure this as a real package right now so am putting test functions here to eventually become unit tests
 def test_match_string_prefix_fuzzy():
     # exact match
@@ -387,16 +416,22 @@ def test_match_string_prefix_fuzzy():
     prefix = " The  quick brown"
     assert match_string_prefix_fuzzy(body, prefix) == 19
 
-    # misalignment (see #TODO in func. 
+    # misalignment (see #TODO in func.
     assert match_string_prefix_fuzzy("Hello world", "Hello Mars") is None
 
     # prefix longer than body
     assert match_string_prefix_fuzzy("Short", "Short but longer") is None
 
     # exact match
-    assert match_string_prefix_fuzzy("Statute Title\nStatute Name\nRest of text", "Statute Title Statute Name") == 26
+    assert (
+        match_string_prefix_fuzzy(
+            "Statute Title\nStatute Name\nRest of text", "Statute Title Statute Name"
+        )
+        == 26
+    )
 
     print("All fuzzy string matching tests passed.")
+
 
 if __name__ == "__main__":
     test_match_string_prefix_fuzzy()
@@ -408,10 +443,7 @@ if __name__ == "__main__":
     res = parser.parse()
 
     for title, name, body, history in res:
-        if history.strip() == "":
-            print(f"history for title {title}: \"{history}\"")
-            print(name)
-            print(body)
-
-
-
+        print(f"Title {title}:")
+        print(body)
+        print("")
+        print("________________")
