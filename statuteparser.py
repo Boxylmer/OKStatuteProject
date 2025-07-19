@@ -2,7 +2,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
-from typing import List, Dict, Tuple, Union, Any
+from typing import List, Dict, Tuple, Any
 import pymupdf4llm  # type: ignore
 
 
@@ -315,133 +315,80 @@ class StatuteParser:
             )
         )
 
-    # def _structure_statute_text(self, statute_text: str) -> dict:
-    #     """
-    #     Convert a single statute string into structured JSON with nested subsections.
-    #     Extracts history/notes as a separate field.
-    #     """
-    #     import re
-
-    #     # Patterns for subsection labels (A, 1, a, i, etc.)
-    #     label_patterns = [
-    #         (r"^[A-Z]\.", "alpha"),
-    #         (r"^\d+\.", "numeric"),
-    #         (r"^[a-z]\.", "lower"),
-    #         (r"^i{1,3}v?|iv|ix|x{1,3}\.", "roman")  # naive roman numerals
-    #     ]
-
-    #     history_lines = []
-    #     body_lines = []
-    #     in_history = False
-
-    #     for line in statute_text.strip().splitlines():
-    #         line = line.strip()
-    #         if not line:
-    #             continue
-    #         if re.match(r"^(Added|Amended|Repealed|NOTE:)", line):
-    #             in_history = True
-    #         if in_history:
-    #             history_lines.append(line)
-    #         else:
-    #             body_lines.append(line)
-
-    #     # Helper to normalize labels (remove dot or parens)
-    #     def normalize_label(raw):
-    #         return raw.strip("().").strip()
-
-    #     # Build tree
-    #     root = {"label": "", "text": "", "subsections": []}
-    #     stack = [root]
-
-    #     for line in body_lines:
-    #         label = None
-    #         text = line
-
-    #         for pattern, _ in label_patterns:
-    #             match = re.match(pattern, line)
-    #             if match:
-    #                 label = normalize_label(match.group())
-    #                 text = line[match.end():].strip()
-    #                 break
-
-    #         if label is None:
-    #             # continuation of previous text
-    #             stack[-1]["text"] += " " + line
-    #             continue
-
-    #         # Determine depth
-    #         if re.match(r"^[A-Z]$", label):
-    #             level = 1
-    #         elif re.match(r"^\d+$", label):
-    #             level = 2
-    #         elif re.match(r"^[a-z]$", label):
-    #             level = 3
-    #         elif re.match(r"^i{1,3}v?$|^x{1,3}$", label):  # roman
-    #             level = 4
-    #         else:
-    #             level = len(stack)  # fallback
-
-    #         # Truncate or extend stack to the correct depth
-    #         stack = stack[:level]
-    #         new_node = {"label": label, "text": text, "subsections": []}
-    #         stack[-1]["subsections"].append(new_node)
-    #         stack.append(new_node)
-
-    #     return {
-    #         "label": root["label"],
-    #         "text": root["text"],
-    #         "subsections": root["subsections"],
-    #         "history": "\n".join(history_lines).strip()
-    #     }
-
-
 class StatuteStructurer:
     """
     Break a statute body into a structured format.
 
     Detection finds the first of the MARKER_PATTERNS and holds on to it for that "level"
-    I have no idea if the other staute titles follow this format, 
+    I have no idea if the other staute titles follow this format,
         if you use something other than title 21 and it breaks, I'm sorry.
-        We definitely need a ton of unittests on this thing. 
+        We definitely need a ton of unittests on this thing.
 
     Level Header Pattern Order:
         1. Capital Letters: A., B., C., ...
         2. Numbers: 1., 2., 3., ...
         3. Lowercase Letters: a., b., c., ...
-        # TODO maybe we will need i, ii, ...? This is harder and I didn't want to waste time on it yet. 
+        # TODO maybe we will need i, ii, ...? This is harder and I didn't want to waste time on it yet.
     """
 
     MARKER_PATTERNS = [
-        (r"^[ ]{0,3}([A-Z]\.)", "alpha_upper"),   # A. B. C.
-        (r"^[ ]{0,3}(\d+\.)", "numeric"),        # 1. 2. 3.
-        (r"^[ ]{0,3}([a-z]\.)", "alpha_lower"),   # a. b. c.
+        (r"^\s*([A-Z])\. ", "alpha_upper"),  # A. B. C.
+        (r"^\s*(\d+)\. ", "numeric"),  # 1. 2. 3.
+        (r"^\s*([a-z])\. ", "alpha_lower"),  # a. b. c.
     ]
 
     def __init__(self):
         self.structure = []
         self.stack = []
-        self.level_order = [] 
+        self.level_order = []
 
     def structure_statute(self, text: str) -> List[Dict[str, Any]]:
-        lines = text.strip().splitlines()
+        cleaned_text = self.remove_soft_newlines(text)
+        print(cleaned_text)
+        lines = cleaned_text.strip().splitlines()
         for line in lines:
-            label, label_level, content = self._extract_label(line)
-            if label:
-                self._push_section(label, label_level, content)
-            else:
-                self._append_to_last(line)
+            self._process_line(line)
+        self._check_consistency(self.structure)
         return self.structure
 
-    def _extract_label(self, line: str) -> tuple[str, str, str]: # [label name (A, 1, etc)], [label level (1, 2, 3)], [line body]
+    def _check_line_for_label(self, line: str) -> tuple[str, str, int] | None:
+        """
+        Returns (label, label_type, match_end) if a label is found at start of line, else None.
+        """
         for pattern, label_type in self.MARKER_PATTERNS:
             match = re.match(pattern, line)
             if match:
-                label = match.group(1)
-                content = line[match.end():].strip()
-                if label_type not in self.level_order:
-                    self.level_order.append(label_type)
-                return label, label_type, content
-        return '', '', line.strip()
+                label = match.group(1).replace(".", "")
+                return label, label_type, match.end()
+        return None
+
+    def _process_line(self, line: str):
+        match = self._check_line_for_label(line)
+        if not match:
+            self._append_to_last(line)
+            return
+
+        label, label_type, match_end = match
+        if label_type not in self.level_order:
+            self.level_order.append(label_type)
+
+        content = line[match_end:].strip()
+
+        # If content starts with another label, recursively split
+        if self._check_line_for_label(content):
+            self._push_section(label, label_type, "")
+            self._process_line(content)  # Recurse
+        else:
+            self._push_section(label, label_type, content)
+
+    def _extract_label(self, line: str) -> tuple[str, str, str]:
+        match = self._check_line_for_label(line)
+        if match:
+            label, label_type, match_end = match
+            if label_type not in self.level_order:
+                self.level_order.append(label_type)
+            return label, label_type, line[match_end:].strip()
+        return "", "", line.strip()
 
     def _push_section(self, label: str, label_type: str, content: str):
         level = self.level_order.index(label_type)
@@ -463,7 +410,9 @@ class StatuteStructurer:
         elif self.structure:
             self.structure[-1]["text"] += " " + line.strip()
         else:
-            self.structure.append({"label": "", "text": line.strip(), "subsections": []})
+            self.structure.append(
+                {"label": "", "text": line.strip(), "subsections": []}
+            )
 
     def _check_consistency(self, sections: List[Dict[str, Any]]):
         "Did I actually get something in the right order? I.e., A->B->1->2->C->1->2..."
@@ -471,24 +420,67 @@ class StatuteStructurer:
             self._check_recursive(level_sections)
 
     def _check_recursive(self, sections: List[Dict[str, Any]]):
-        # I don't know a better way to do this than a virtually unreadable recursion function 
-        # TODO find out if best practice is to put this function inside _check_consistency
-
-        # TODO this currently fails. search "No corporation or labor union may" and see things start with 2 and progress without nesting
         labels = [s["label"] for s in sections if s["label"]]
-        if all(label.endswith(".") for label in labels):
-            base_labels = [label[:-1] for label in labels]
-            if all(b.isdigit() for b in base_labels):
-                nums = list(map(int, base_labels))
-                if nums != sorted(nums):
-                    raise ValueError(f"Inconsistent numeric label order: {labels}")
-            elif all(len(b) == 1 and b.isalpha() for b in base_labels):
-                ords = list(map(lambda c: ord(c.lower()), base_labels))
-                if ords != sorted(ords):
-                    raise ValueError(f"Inconsistent alphabetic label order: {labels}")
+        if not labels:
+            return
+
+        # Check for numeric sequence: 1, 2, 3, ...
+        if all(label.isdigit() for label in labels):
+            print(labels)
+            nums = list(map(int, labels))
+            expected = list(range(1, len(nums) + 1))
+            if nums != expected:
+                raise ValueError(
+                    f"Inconsistent numeric label sequence: expected {expected}, got {nums}."
+                )
+
+        # Check for alphabetic sequence: A, B, C, ... or a, b, c, ...
+        elif all(len(label) == 1 and label.isalpha() for label in labels):
+            print(labels)
+            ords = [ord(label.lower()) for label in labels]
+            expected = list(range(ord("a"), ord("a") + len(ords)))
+            if ords != expected:
+                raise ValueError(
+                    f"Inconsistent alphabetic label sequence: expected {[chr(o).upper() for o in expected]}, got {labels}"
+                )
+
+        # Recurse into nested sections
         for section in sections:
             self._check_recursive(section["subsections"])
 
+    def remove_soft_newlines(self, text: str) -> str:
+        lines = text.splitlines()
+        cleaned = []
+        buffer = ""
+
+        for i in range(len(lines)):
+            current = buffer if buffer else lines[i]
+            current = current.rstrip()
+            if not current:
+                continue
+            if i + 1 >= len(lines):
+                cleaned.append(current)
+                break
+
+            next_line = lines[i + 1]
+            stripped_next = next_line.strip()
+
+            # Rule 1: current ends in alphanumeric or comma
+            ends_in_soft_char = current[-1].isalnum() or current[-1] == ","
+            # print(f"\"{current}\"")
+            # Rule 2: next line is not indented (i.e., doesn't start with whitespace)
+            starts_without_indent = not next_line[:1].isspace()
+
+            if ends_in_soft_char and starts_without_indent:
+                # Merge with next line
+                buffer = current + " " + stripped_next
+                lines[i + 1] = ""  # Consume next line
+            else:
+                cleaned.append(current)
+                buffer = ""
+
+        return "\n".join(cleaned)
+    
 
 # Too lazy to structure this as a real package right now so am putting test functions here to eventually become unit tests
 def test_match_string_prefix_fuzzy():
@@ -538,7 +530,8 @@ if __name__ == "__main__":
 
     for title, name, body, history in res:
         print(f"Title {title}:")
-        print(body)
-        print("")
-        print(StatuteStructurer().structure_statute(body))
-        print("________________")
+        # print(body)
+        # print("")
+        structured = StatuteStructurer().structure_statute(body)
+        # print()
+        # print("________________")
