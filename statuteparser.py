@@ -2,7 +2,8 @@ import hashlib
 import json
 from pathlib import Path
 import re
-from typing import List, Dict, Tuple, Any
+from re import Pattern
+from typing import List, Dict, Tuple, Any, Optional
 import pymupdf4llm  # type: ignore
 
 
@@ -351,6 +352,22 @@ class StatuteStructurer:
         (r"^\s*([a-z])\. ", "alpha_lower"),  # a. b. c.
     ]
 
+    INLINE_MARKER_PATTERNS = [ 
+        (r"(?:^|\s)([A-Z])\. ", "alpha_upper"),   # A.
+        (r"(?:^|\s)(\d+)\. ", "numeric"),         # 1.
+        (r"(?:^|\s)([a-z])\. ", "alpha_lower"),   # a.
+    ]
+
+    PERMITTED_NESTING = {
+        "alpha_upper": [
+            "alpha_upper",
+            "numeric",
+            "alpha_lower",
+        ],  # A. followed by B., 1., a.
+        "numeric": ["numeric", "alpha_lower"],  # 1. followed by 2., a.
+        "alpha_lower": ["alpha_lower", "numeric"],  # a. followed by b., 1.
+    }
+
     def __init__(self):
         self.structure = []
         self.stack = []
@@ -379,6 +396,34 @@ class StatuteStructurer:
                 return label, label_type, match.end()
         return None
 
+    @staticmethod
+    def get_other_type_starters(label_type: str) -> Pattern:
+        """
+        Given a label_type ('numeric', 'alpha_upper', or 'alpha_lower'), 
+        return regex patterns to detect starter inline labels for the other two types.
+        These can appear anywhere in the line as long as they are preceded by whitespace or start-of-line.
+        
+        Returns:
+            Regex pattern
+        """
+        starter_literals = {
+            "alpha_upper": "A",
+            "alpha_lower": "a",
+            "numeric": "1",
+        }
+
+        other_types = [lt for lt in starter_literals if lt != label_type]
+
+        patterns = []
+        for lt in other_types:
+            literal = re.escape(starter_literals[lt] + ". ")
+            # Match either start of line or whitespace before the literal
+            pattern = rf"(?:(?<=^)|(?<=\s)){literal}"
+            patterns.append(pattern)
+
+        combined_pattern = "|".join(patterns)
+        return re.compile(combined_pattern)
+
     def _process_line(self, line: str):
         match = self._check_line_for_label(line)
         if not match:
@@ -394,9 +439,26 @@ class StatuteStructurer:
         # If content starts with another label, recursively split
         if self._check_line_for_label(content):
             self._push_section(label, label_type, "")
-            self._process_line(content)  # Recurse
-        else:
-            self._push_section(label, label_type, content)
+            self._process_line(content) 
+            return
+
+        # if content contains an expected inline label, recursively split
+        inline_pattern = self.get_other_type_starters(label_type)
+        inline_match = inline_pattern.search(content)
+
+        if inline_match:
+            split_idx = inline_match.start()
+            before = content[:split_idx].strip()
+            after = content[split_idx:].strip()
+
+            self._push_section(label, label_type, before)
+            self._process_line(after)
+            return
+        
+        # all other edge cases not happening: just add it to the section
+        self._push_section(label, label_type, content)
+
+        
 
     def _extract_label(self, line: str) -> tuple[str, str, str]:
         match = self._check_line_for_label(line)
@@ -548,9 +610,8 @@ if __name__ == "__main__":
     res = parser.parse()
     exceptions = [""]
     for title, name, body, history in res:
-        print(f"Title {title}:")
-        # print(title, name, body, history)
-        # print("")
+        print(f"Title {title}")
+        print("")
         if title in TITLE_21_CONSISTENCY_EXCEPTIONS:
             check_consistency = False
         else:
@@ -558,5 +619,6 @@ if __name__ == "__main__":
         structured = StatuteStructurer().structure_statute(
             body, check_consistency=check_consistency
         )
+        # print(structured)
         # print()
         # print("________________")
