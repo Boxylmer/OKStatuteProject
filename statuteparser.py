@@ -96,8 +96,6 @@ class StatuteParser:
 
     def parse(self):
         clean_statute_info = self._parse_statute_pdf_text()
-        # statute_components = [self._segment_statute_text(s_text, toc_entry) for s_text, toc_entry in zip(statute_texts, statute_names)]
-        # print(statute_texts[5])  # Debug stub.
 
         return clean_statute_info
 
@@ -205,19 +203,12 @@ class StatuteParser:
         if statute_name.lower().strip().startswith("renumbered"):
             return "renumbered", raw_statute_body
 
-        # print("________________________")
-        # print(raw_statute_body)
-        # print("...")
-
         # Remove title
         if not raw_statute_body.startswith(statute_title):
             raise ValueError(
                 f"Statute number '{statute_title}' not found at start of '{raw_statute_body}'"
             )
         statute_body = raw_statute_body[len(statute_title) :].strip()
-
-        # print(statute_body)
-        # print("...")
 
         match_end = match_string_prefix_fuzzy(body=statute_body, prefix=statute_name)
         if match_end is None:
@@ -227,8 +218,6 @@ class StatuteParser:
 
         statute_body = statute_body[match_end:].lstrip()
 
-        # print(statute_body)
-        # print("...")
         historical_pattern = re.compile(
             r"(?m)^[ \t]*("
             + "|".join(re.escape(s) for s in StatuteParser.HISTORICAL_DATA_STARTERS)
@@ -244,25 +233,7 @@ class StatuteParser:
             statute_body = statute_body
             historical_data = ""
 
-        # print(statute_body)
-        # print("...")
-        # print(historical_data)
-        # print("__________________________")
-        # print("________________________")
         return statute_body, historical_data
-
-    # @staticmethod
-    # def _format_title(title: str):
-    #     # §21-20J. -> 21.20J
-
-    #     title = title.strip()
-    #     if title.endswith('.'):
-    #         title = title[:-1]
-    #     title = title.replace("§", "").replace("-", ".")
-
-    #     # check title consistency
-    #     if not re.match(r"^[a-zA-Z0-9]+\.[a-zA-Z0-9]+$", title):
-    #         raise ValueError(f"Invalid statute title format: \"{title}\"")
 
     def _parse_statute_pdf_text(self) -> list[tuple[str, str, str, str]]:
         """
@@ -352,10 +323,10 @@ class StatuteStructurer:
         (r"^\s*([a-z])\. ", "alpha_lower"),  # a. b. c.
     ]
 
-    INLINE_MARKER_PATTERNS = [ 
-        (r"(?:^|\s)([A-Z])\. ", "alpha_upper"),   # A.
-        (r"(?:^|\s)(\d+)\. ", "numeric"),         # 1.
-        (r"(?:^|\s)([a-z])\. ", "alpha_lower"),   # a.
+    INLINE_MARKER_PATTERNS = [
+        (r"(?:^|\s)([A-Z])\. ", "alpha_upper"),  # A.
+        (r"(?:^|\s)(\d+)\. ", "numeric"),  # 1.
+        (r"(?:^|\s)([a-z])\. ", "alpha_lower"),  # a.
     ]
 
     PERMITTED_NESTING = {
@@ -377,7 +348,6 @@ class StatuteStructurer:
         self, text: str, check_consistency=True
     ) -> List[Dict[str, Any]]:
         cleaned_text = self._remove_soft_newlines(text)
-        print(cleaned_text)
         lines = cleaned_text.strip().splitlines()
         for line in lines:
             self._process_line(line)
@@ -399,10 +369,10 @@ class StatuteStructurer:
     @staticmethod
     def get_other_type_starters(label_type: str) -> Pattern:
         """
-        Given a label_type ('numeric', 'alpha_upper', or 'alpha_lower'), 
+        Given a label_type ('numeric', 'alpha_upper', or 'alpha_lower'),
         return regex patterns to detect starter inline labels for the other two types.
         These can appear anywhere in the line as long as they are preceded by whitespace or start-of-line.
-        
+
         Returns:
             Regex pattern
         """
@@ -439,7 +409,7 @@ class StatuteStructurer:
         # If content starts with another label, recursively split
         if self._check_line_for_label(content):
             self._push_section(label, label_type, "")
-            self._process_line(content) 
+            self._process_line(content)
             return
 
         # if content contains an expected inline label, recursively split
@@ -454,11 +424,9 @@ class StatuteStructurer:
             self._push_section(label, label_type, before)
             self._process_line(after)
             return
-        
+
         # all other edge cases not happening: just add it to the section
         self._push_section(label, label_type, content)
-
-        
 
     def _extract_label(self, line: str) -> tuple[str, str, str]:
         match = self._check_line_for_label(line)
@@ -505,7 +473,6 @@ class StatuteStructurer:
 
         # Check for numeric sequence: 1, 2, 3, ...
         if all(label.isdigit() for label in labels):
-            print(labels)
             nums = list(map(int, labels))
             expected = list(range(1, len(nums) + 1))
             if nums != expected:
@@ -515,7 +482,6 @@ class StatuteStructurer:
 
         # Check for alphabetic sequence: A, B, C, ... or a, b, c, ...
         elif all(len(label) == 1 and label.isalpha() for label in labels):
-            print(labels)
             ords = [ord(label.lower()) for label in labels]
             expected = list(range(ord("a"), ord("a") + len(ords)))
             if ords != expected:
@@ -546,7 +512,7 @@ class StatuteStructurer:
 
             # Rule 1: current ends in alphanumeric or comma
             ends_in_soft_char = current[-1].isalnum() or current[-1] == ","
-            # print(f"\"{current}\"")
+            
             # Rule 2: next line is not indented (i.e., doesn't start with whitespace)
             starts_without_indent = not next_line[:1].isspace()
 
@@ -619,6 +585,3 @@ if __name__ == "__main__":
         structured = StatuteStructurer().structure_statute(
             body, check_consistency=check_consistency
         )
-        # print(structured)
-        # print()
-        # print("________________")
