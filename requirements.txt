@@ -9,3 +9,4 @@ ollama
 pymupdf4llm
 requests
 sentence-transformers
+pymupdf4llm

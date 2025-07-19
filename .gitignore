@@ -3,3 +3,4 @@ venv
 data/*
 chroma
 __pycache__/statuteparser.cpython-310.pyc
+docs/statutes/cache/*
