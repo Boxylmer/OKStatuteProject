@@ -250,6 +250,19 @@ class StatuteParser:
         # print("________________________")
         return statute_body, historical_data
 
+    # @staticmethod
+    # def _format_title(title: str):
+    #     # §21-20J. -> 21.20J
+
+    #     title = title.strip()
+    #     if title.endswith('.'):
+    #         title = title[:-1]
+    #     title = title.replace("§", "").replace("-", ".")
+
+    #     # check title consistency
+    #     if not re.match(r"^[a-zA-Z0-9]+\.[a-zA-Z0-9]+$", title):
+    #         raise ValueError(f"Invalid statute title format: \"{title}\"")
+
     def _parse_statute_pdf_text(self) -> list[tuple[str, str, str, str]]:
         """
         Get the raw statute pdf text and segment out the text, title, and name of each statute.
@@ -305,7 +318,7 @@ class StatuteParser:
         ]
 
         unstructured_clean_bodies, clean_historical_data
-
+        # formatted_titles = [self._format_title(title) for title in toc_titles]
         return list(
             zip(
                 toc_titles,
@@ -314,6 +327,7 @@ class StatuteParser:
                 clean_historical_data,
             )
         )
+
 
 class StatuteStructurer:
     """
@@ -342,13 +356,16 @@ class StatuteStructurer:
         self.stack = []
         self.level_order = []
 
-    def structure_statute(self, text: str) -> List[Dict[str, Any]]:
-        cleaned_text = self.remove_soft_newlines(text)
+    def structure_statute(
+        self, text: str, check_consistency=True
+    ) -> List[Dict[str, Any]]:
+        cleaned_text = self._remove_soft_newlines(text)
         print(cleaned_text)
         lines = cleaned_text.strip().splitlines()
         for line in lines:
             self._process_line(line)
-        self._check_consistency(self.structure)
+        if check_consistency:
+            self._check_consistency(self.structure)
         return self.structure
 
     def _check_line_for_label(self, line: str) -> tuple[str, str, int] | None:
@@ -448,7 +465,7 @@ class StatuteStructurer:
         for section in sections:
             self._check_recursive(section["subsections"])
 
-    def remove_soft_newlines(self, text: str) -> str:
+    def _remove_soft_newlines(self, text: str) -> str:
         lines = text.splitlines()
         cleaned = []
         buffer = ""
@@ -480,7 +497,7 @@ class StatuteStructurer:
                 buffer = ""
 
         return "\n".join(cleaned)
-    
+
 
 # Too lazy to structure this as a real package right now so am putting test functions here to eventually become unit tests
 def test_match_string_prefix_fuzzy():
@@ -522,16 +539,24 @@ def test_match_string_prefix_fuzzy():
 if __name__ == "__main__":
     test_match_string_prefix_fuzzy()
     # parse title 21
+
+    TITLE_21_CONSISTENCY_EXCEPTIONS = "§21-1168."
     statute_path = Path("docs") / "statutes"
     parser = StatuteParser(
         pdf_path=statute_path / "2024-21.pdf", cache_dir=statute_path / "cache"
     )
     res = parser.parse()
-
+    exceptions = [""]
     for title, name, body, history in res:
         print(f"Title {title}:")
-        # print(body)
+        # print(title, name, body, history)
         # print("")
-        structured = StatuteStructurer().structure_statute(body)
+        if title in TITLE_21_CONSISTENCY_EXCEPTIONS:
+            check_consistency = False
+        else:
+            check_consistency = True
+        structured = StatuteStructurer().structure_statute(
+            body, check_consistency=check_consistency
+        )
         # print()
         # print("________________")
