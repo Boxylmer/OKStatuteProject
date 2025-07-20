@@ -3,7 +3,10 @@ import json
 from pathlib import Path
 import re
 from re import Pattern
+import textwrap
 from typing import List, Dict, Tuple, Any, Optional
+
+
 import pymupdf4llm  # type: ignore
 
 
@@ -323,26 +326,11 @@ class StatuteBodyStructurer:
         (r"^\s*([a-z])\. ", "alpha_lower"),  # a. b. c.
     ]
 
-    INLINE_MARKER_PATTERNS = [
-        (r"(?:^|\s)([A-Z])\. ", "alpha_upper"),  # A.
-        (r"(?:^|\s)(\d+)\. ", "numeric"),  # 1.
-        (r"(?:^|\s)([a-z])\. ", "alpha_lower"),  # a.
-    ]
-
-    PERMITTED_NESTING = {
-        "alpha_upper": [
-            "alpha_upper",
-            "numeric",
-            "alpha_lower",
-        ],  # A. followed by B., 1., a.
-        "numeric": ["numeric", "alpha_lower"],  # 1. followed by 2., a.
-        "alpha_lower": ["alpha_lower", "numeric"],  # a. followed by b., 1.
-    }
-
     def __init__(self):
         self._structure = []
         self.stack = []
         self.level_order = []
+        self.pending_root_level = False
 
     def structure(
         self, raw_body_text: str, check_consistency=True
@@ -353,6 +341,18 @@ class StatuteBodyStructurer:
 
         for line in lines:
             self._process_line(line)
+
+        # Modify structure with an unlabeled toplevel section and multiple labeled toplevel sections to be nested instead
+        if len(self._structure) > 1 and self._structure[0]['label'] == '':
+            unlabeled_intro = self._structure[0]
+            the_rest = self._structure[1:]
+
+            # Check that all the rest are labeled and that labels form a consistent sequence
+            all_labeled = all(s.get("label") for s in the_rest)
+            
+            if all_labeled:
+                unlabeled_intro["subsections"].extend(the_rest)
+                self._structure = [unlabeled_intro]
         
         if check_consistency:
             self._check_consistency(self._structure)
@@ -372,7 +372,7 @@ class StatuteBodyStructurer:
         return None
 
     @staticmethod
-    def get_other_type_starters(label_type: str) -> Pattern:
+    def _get_other_type_starters(label_type: str) -> Pattern:
         """
         Given a label_type ('numeric', 'alpha_upper', or 'alpha_lower'),
         return regex patterns to detect starter inline labels for the other two types.
@@ -418,7 +418,7 @@ class StatuteBodyStructurer:
             return
 
         # if content contains an expected inline label, recursively split
-        inline_pattern = self.get_other_type_starters(label_type)
+        inline_pattern = self._get_other_type_starters(label_type)
         inline_match = inline_pattern.search(content)
 
         if inline_match:
@@ -557,7 +557,6 @@ class StatuteTitleStructurer:
         return [title, section, version or None]
 
 
-
 # put in own file
 class Statute:
     """Main class that holds statute information."""
@@ -574,8 +573,8 @@ class Statute:
             labels = []
             for section in sections:
                 label = section["label"]
-                if not label: 
-                    continue
+                # if not label: 
+                #     continue
                 full_label = f"{prefix}.{label}" if prefix and label else label or prefix
                 labels.append(full_label)
                 if section["subsections"]:
@@ -614,6 +613,30 @@ class Statute:
                 output.append(result)
 
         return "\n".join(output).strip()
+
+
+def test_statute_body_structurer():
+    text = textwrap.dedent(
+    """
+        A crime or public offense is an act or omission forbidden by
+        law, and to which is annexed, upon conviction, either of the
+        following punishments:
+            1. Death;
+            2. Imprisonment;
+            3. Fine;
+
+            4. Removal from office; or
+            5. Disqualification to hold and enjoy any office of honor,
+        trust, or profit, under this state.
+    """)
+
+    structured = StatuteBodyStructurer().structure(raw_body_text=text)
+    assert structured[0]['label'] == ''
+    assert len(structured) == 1
+    assert len(structured[0]['subsections']) == 5
+    assert structured[0]['subsections'][0]['label'] == '1'
+    assert structured[0]['subsections'][1]['label'] == '2'
+
 
 def test_statute_title_structurer():
     ans = StatuteTitleStructurer().structure("§21-54.1v2")
@@ -663,6 +686,7 @@ def test_match_string_prefix_fuzzy():
 
 if __name__ == "__main__":
     test_match_string_prefix_fuzzy()
+    test_statute_body_structurer()
     test_statute_title_structurer()
     
 
@@ -676,9 +700,7 @@ if __name__ == "__main__":
 
     statutes: list[Statute] = []
     for title, name, body, history in res:
-        # print(f"Title {title}")
-        # print("")
-        # print(body)
+        
         if title in TITLE_21_CONSISTENCY_EXCEPTIONS:
             check_consistency = False
         else:
@@ -693,5 +715,7 @@ if __name__ == "__main__":
         statutes.append(st)
         print(st.title, st.directory())
         
-        print(st.get_text())
-
+        print(body)
+        # print(st.get_text())
+        print(structured_body)
+        print()
