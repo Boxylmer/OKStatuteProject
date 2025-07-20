@@ -301,7 +301,7 @@ class StatuteParser:
         )
 
 
-class StatuteStructurer:
+class StatuteBodyStructurer:
     """
     Break a statute body into a structured format.
 
@@ -340,20 +340,25 @@ class StatuteStructurer:
     }
 
     def __init__(self):
-        self.structure = []
+        self._structure = []
         self.stack = []
         self.level_order = []
 
-    def structure_statute(
-        self, text: str, check_consistency=True
+    def structure(
+        self, raw_body_text: str, check_consistency=True
     ) -> List[Dict[str, Any]]:
-        cleaned_text = self._remove_soft_newlines(text)
+        cleaned_text = self._remove_soft_newlines(raw_body_text)
         lines = cleaned_text.strip().splitlines()
+
+
         for line in lines:
             self._process_line(line)
+        
         if check_consistency:
-            self._check_consistency(self.structure)
-        return self.structure
+            self._check_consistency(self._structure)
+        
+        
+        return self._structure
 
     def _check_line_for_label(self, line: str) -> tuple[str, str, int] | None:
         """
@@ -445,7 +450,7 @@ class StatuteStructurer:
             self.stack.pop()
 
         if not self.stack:
-            self.structure.append(section)
+            self._structure.append(section)
         else:
             self.stack[-1]["subsections"].append(section)
 
@@ -454,10 +459,10 @@ class StatuteStructurer:
     def _append_to_last(self, line: str):
         if self.stack:
             self.stack[-1]["text"] += " " + line.strip()
-        elif self.structure:
-            self.structure[-1]["text"] += " " + line.strip()
+        elif self._structure:
+            self._structure[-1]["text"] += " " + line.strip()
         else:
-            self.structure.append(
+            self._structure.append(
                 {"label": "", "text": line.strip(), "subsections": []}
             )
 
@@ -512,7 +517,7 @@ class StatuteStructurer:
 
             # Rule 1: current ends in alphanumeric or comma
             ends_in_soft_char = current[-1].isalnum() or current[-1] == ","
-            
+
             # Rule 2: next line is not indented (i.e., doesn't start with whitespace)
             starts_without_indent = not next_line[:1].isspace()
 
@@ -525,6 +530,100 @@ class StatuteStructurer:
                 buffer = ""
 
         return "\n".join(cleaned)
+
+class StatuteTitleStructurer:
+    def __init__(self):
+        pass
+
+    def structure(self, raw_title_text):
+        """
+        Parses a statute title like '§21-54.1v2' into:
+            - title: '21'
+            - section: '54.1'
+            - version: '2' (or None)
+        Returns:
+            [title (str), section (str), version (str or None)]
+        """
+
+        # Remove § symbol and trailing punctuation
+        text = raw_title_text.strip().lstrip("§").rstrip(".: ")
+
+        # Match patterns like 21-54.1v2 or 21-123a
+        match = re.match(r"(\d+)-([A-Za-z0-9.-]+?)(?:v(\d+))?$", text)
+        if not match:
+            raise ValueError(f"Unrecognized title format: {raw_title_text}")
+
+        title, section, version = match.groups()
+        return [title, section, version or None]
+
+
+
+# put in own file
+class Statute:
+    """Main class that holds statute information."""
+
+    def __init__(self, title: list, name: str, body: list, history, references=None):
+        self.title = title
+        self.name = name
+        self.body = body
+        self.history = history
+        self.references = references
+
+    def directory(self):
+        def collect_labels(sections, prefix=""):
+            labels = []
+            for section in sections:
+                label = section["label"]
+                if not label: 
+                    continue
+                full_label = f"{prefix}.{label}" if prefix and label else label or prefix
+                labels.append(full_label)
+                if section["subsections"]:
+                    labels.extend(collect_labels(section["subsections"], full_label))
+            return labels
+
+        return collect_labels(self.body)
+
+
+    def get_text(self, subsection=None, indent=2):
+        def format_section(section, parent_labels=[], level=0):
+            label = section["label"] or None
+
+            current_labels = parent_labels + [label] if label else parent_labels
+    
+            indent_space = " " * (level * indent)
+
+            # Construct full label and local label
+            full_label = ".".join(filter(None, current_labels))
+            display_label = f"{label}. " if label else ""
+
+            # Decide whether to include this section
+            if subsection is None or full_label == subsection or (
+                subsection and full_label and subsection.startswith(subsection + ".")
+            ):
+                lines = [f"{indent_space}{display_label}{section['text']}"]
+                for sub in section["subsections"]:
+                    lines.append(format_section(sub, current_labels, level + 1))
+                return "\n".join(lines)
+            return ""
+
+        output = []
+        for sec in self.body:
+            result = format_section(sec)
+            if result:
+                output.append(result)
+
+        return "\n".join(output).strip()
+
+def test_statute_title_structurer():
+    ans = StatuteTitleStructurer().structure("§21-54.1v2")
+    assert ans == ['21', '54.1', '2']
+
+    ans = StatuteTitleStructurer().structure("§21-123a.")
+    assert ans == ['21', '123a', None]
+
+    ans = StatuteTitleStructurer().structure("§63-312.5:")
+    assert ans == ['63', '312.5', None]
 
 
 # Too lazy to structure this as a real package right now so am putting test functions here to eventually become unit tests
@@ -561,12 +660,11 @@ def test_match_string_prefix_fuzzy():
         == 26
     )
 
-    print("All fuzzy string matching tests passed.")
-
 
 if __name__ == "__main__":
     test_match_string_prefix_fuzzy()
-    # parse title 21
+    test_statute_title_structurer()
+    
 
     TITLE_21_CONSISTENCY_EXCEPTIONS = "§21-1168."
     statute_path = Path("docs") / "statutes"
@@ -575,13 +673,25 @@ if __name__ == "__main__":
     )
     res = parser.parse()
     exceptions = [""]
+
+    statutes: list[Statute] = []
     for title, name, body, history in res:
-        print(f"Title {title}")
-        print("")
+        # print(f"Title {title}")
+        # print("")
+        # print(body)
         if title in TITLE_21_CONSISTENCY_EXCEPTIONS:
             check_consistency = False
         else:
             check_consistency = True
-        structured = StatuteStructurer().structure_statute(
-            body, check_consistency=check_consistency
-        )
+        structured_body = StatuteBodyStructurer().structure(body, check_consistency=check_consistency)
+        structured_title = StatuteTitleStructurer().structure(title)
+
+        # print(structured_body)
+
+        # print(len(structured_body))
+        st = Statute(title=title, name=name, body=structured_body, history=history)
+        statutes.append(st)
+        print(st.title, st.directory())
+        
+        print(st.get_text())
+
