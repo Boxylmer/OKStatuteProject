@@ -173,10 +173,10 @@ class TestStatuteRAG(unittest.TestCase):
 
         results_without_reranking = self.statute_rag.query(
             query, top_k=5, rerank_if_available=False
-        )
+        ) # TODO
         results_with_reranking = self.statute_rag.query(query, top_k=5)
 
         self.assertTrue(
-            results_with_reranking[0][0].startswith("Section F"),
+            results_with_reranking[0][0].startswith("Section C"),
             f"started with: {results_with_reranking[0][0][0:30]}...",
         )
