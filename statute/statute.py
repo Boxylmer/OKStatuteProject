@@ -1,215 +1,153 @@
-import re
-import requests  # type: ignore
-from typing import Iterator
-
-from bs4 import BeautifulSoup, Tag, NavigableString
-
-from statute.statutetext import StatuteText
-
-BASE_URL = "https://www.oscn.net/"
+import json
+from pathlib import Path
+from typing import Iterator, Union
 
 
 class Statute:
-    def __init__(self, full_title: str, full_section: str, raw_texts: list[str]):
-        self.full_title = full_title
-        self.full_section = full_section
-        self.raw_text = raw_texts
-        self.statute_text = StatuteText(raw_texts)
+    """Main class that holds statute information."""
 
-    @staticmethod
-    def from_html(html) -> "Statute":
-        soup = BeautifulSoup(html, "html.parser")
-        main_content_div = soup.find(
-            "div", id="oscn-content"
-        )  # right now, everything I want is inside this div
-        if not isinstance(main_content_div, Tag):
-            print("Parsing failed for HTML: dump below")
-            print(main_content_div)
-            raise (ValueError("oscn-content was not found in the html"))
+    SCHEMA_VERSION = 1  # In case you want versioning support
 
-        title, section = Statute._parse_header_data(main_content_div)
+    def __init__(self, reference: dict, name: str, body: list, history):
+        self.reference = reference  # {"title": title, "section": section, "version": version or None}
 
-        raw_texts = Statute._parse_raw_body_data(main_content_div)
+        self.name = name
+        self.body = body
+        # looks like this
+        # [{'label': '', 'text': 'Baz', 'subsections': [{'label': 'A', 'text': 'Foo', 'subsections': []}, {'label': 'B', 'text': 'Bar', 'subsections': []}]}]
+        # if contains references, looks like
+        # [
+        #   {'label': '', 'text': 'Baz', 'subsections': [
+        #       {'label': 'A', 'text': 'Foo', 'subsections': [], 'references'=[]},
+        #       {'label': 'B', 'text': 'Bar', 'subsections': [], 'references'=[]}
+        #    ], 'references'=[]}
+        # ]
 
-        return Statute(title, section, raw_texts=raw_texts)
+        self.history = history
 
-    @staticmethod
-    def _parse_header_data(main_content_div: Tag) -> tuple[str, str]:
-        # looks like inside a div called "document_header", theres a bunch of titles separated by <br> tags, but all in one <p>.
-        organization_soup = main_content_div.find("div", class_="document_header").find(  # type: ignore
-            "p"
-        )
-
-        organization_list = []
-        current_text = ""
-        for elem in organization_soup.descendants:
-            if isinstance(elem, NavigableString):
-                current_text += str(elem).strip().replace("\xa0", " ")
-
-            elif isinstance(elem, Tag) and current_text:
-                organization_list.append(current_text)
-                current_text = ""
-
-        if current_text:
-            organization_list.append(current_text)
-
-        title = next(
-            (line for line in organization_list if line.startswith("Title")), ""
-        )
-        section = next(
-            (line for line in organization_list if line.startswith("Section")), ""
-        )
-
-        missing = []
-        if not title:
-            missing.append("Title")
-        if not section:
-            missing.append("Section")
-
-        if missing:
-            print("DEBUG: organization_list =")
-            for i, line in enumerate(organization_list):
-                print(f"  [{i}]: {repr(line)}")
-            raise ValueError(
-                f"Missing required fields in header data: {', '.join(missing)}"
-            )
-
-        return (title, section)  # type: ignore
-
-    @staticmethod
-    def _parse_raw_body_data(main_content_div: Tag) -> list[str]:
-        document_header_div = main_content_div.find("div", class_="document_header")
-        if not document_header_div:
-            raise ValueError("Could not find <div class='document_header'>")
-
-        # Find the first <p> after the document header, regardless of nesting
-        first_p = document_header_div.find_next("p")
-        if not first_p:
-            raise ValueError(
-                "Could not find any <p> tag after <div class='document_header'>"
-            )
-
-        paragraph_bodies = []
-
-        for el in first_p.find_all_next():
-            el_text = (
-                el.get_text(" ", strip=True)
-                .replace("\n", "")
-                .replace("\r", "")
-                .replace("\xa0", "")
-                .strip()
-                .lower()
-            )
-            if el_text.startswith("historical data"):
-                break
-
-            if isinstance(el, Tag) and el.name == "p":
-                cleaned_text = (
-                    el.get_text(" ", strip=True)
-                    .replace("\n", "")
-                    .replace("\r", "")
-                    .replace("\xa0", "")
-                    .strip()
+    def directory(self):
+        def collect_labels(sections, prefix=""):
+            labels = []
+            for section in sections:
+                label = section["label"]
+                full_label = (
+                    f"{prefix}.{label}" if prefix and label else label or prefix
                 )
+                labels.append(full_label)
+                if section["subsections"]:
+                    labels.extend(collect_labels(section["subsections"], full_label))
+            return labels
 
-                if cleaned_text:
-                    paragraph_bodies.append(cleaned_text)
+        return collect_labels(self.body)
 
-        return paragraph_bodies
+    def get_text(self, subsection=None, indent=2):
+        def format_section(section, parent_labels=[], level=0):
+            label = section["label"] or None
+            current_labels = parent_labels + [label] if label else parent_labels
+            indent_space = " " * (level * indent)
 
-    @staticmethod
-    def _parse_title_text(raw_text: str):
-        match = re.match(r"Title\s+([0-9A-Z]+)\.\s*(.+)", raw_text)
-        if match:
-            title_number = match.group(1)
-            title_text = match.group(2)
-        else:
-            raise (
-                ValueError(
-                    f"The title '{raw_text}' was not parsable as a statute title."
-                )
-            )
-        return title_number, title_text
-
-    @staticmethod
-    def from_oscn(link: str) -> "Statute":
-        html = requests.get(link).text
-        return Statute.from_html(html)
-
-    def formatted_text(self, **kwargs) -> str:
-        return self.statute_text.as_text(**kwargs)
-
-    def structured_text(self) -> list[dict]:
-        return self.statute_text.structured_data
-
-    # StatuteText wrappers
-    def text_json(self):
-        return self.statute_text.as_json()
-
-    def text(self, subsection: str = "", pretty: bool = False, indent: int = 2):
-        return self.statute_text.as_text(
-            subsection=subsection, pretty=pretty, indent=indent
-        )
-
-    def subsection_names(self):
-        return self.statute_text.subsection_names()
-
-    def get_subsection(self, subsection_name):
-        return self.statute_text._get_subsection(subsection_name=subsection_name)
-
-    def parse_title(self) -> tuple[str, str]:
-        """
-        Extracts the title number and title label from a line like:
-        'Title 124A. Crimes and Punishments'
-        returns (title_id, title_description)
-        """
-        match = re.match(r"Title\s+([0-9A-Za-z]+)\.\s*(.+)", self.full_title)
-        if not match:
-            raise ValueError(f"Unrecognized title format: {self.full_title}")
-        return match.group(1), match.group(2)
-
-    def parse_section(self) -> tuple[str, str]:
-        """
-        Extracts the section number and label from a line like:
-        'Section 301 - Prevention of Legislative Meetings - Penalty'
-        returns (section_id, section_description)
-        """
-        match = re.match(r"Section\s+([0-9A-Za-z.-]+)\s*-\s*(.+)", self.full_section)
-        if not match:
-            raise ValueError(f"Unrecognized section format: {self.full_section}")
-        return match.group(1), match.group(2)
-
-    def parse_citation(self) -> str:
-        return f"{self.parse_title()[0]}.{self.parse_section()[0]}"
-
-    def walk_sections(self, **kwargs) -> list[tuple[str, str]]:
-        return self.statute_text.walk_sections(**kwargs)
-
-    @staticmethod
-    def get_statute_links(statute_title_url, ignore_repealed=True, verbose=False):
-        if verbose:
-            print("Getting raw link page")
-        response = requests.get(statute_title_url)
-        if verbose:
-            print("Response recieved. Parsing links")
-
-        soup = BeautifulSoup(response.text, "html.parser")
-        statute_links = []
-        if verbose:
-            print("Links parsed. Filtering for repealed and invalid statute links")
-
-        for link in soup.find_all("a", href=True):
-            text = link.get_text(strip=True)
-            href = link["href"]
-
-            if ignore_repealed and text.strip().lower().endswith("repealed"):
-                continue
+            full_label = ".".join(filter(None, current_labels))
+            display_label = f"{label}. " if label else ""
 
             if (
-                "DeliverDocument.asp?CiteID=" not in href
-            ):  # i.e., is the link actually to a statute?
-                continue
+                subsection is None
+                or full_label == subsection
+                or (
+                    subsection
+                    and full_label
+                    and full_label.startswith(subsection + ".")
+                )
+            ):
+                lines = [f"{indent_space}{display_label}{section['text']}"]
+                for sub in section["subsections"]:
+                    lines.append(format_section(sub, current_labels, level + 1))
+                return "\n".join(lines)
+            return ""
 
-            full_url = BASE_URL + "/applications/oscn/" + href
-            statute_links.append({"citation": text, "link": full_url})
-        return statute_links
+        output = []
+        for sec in self.body:
+            result = format_section(sec)
+            if result:
+                output.append(result)
+
+        return "\n".join(output).strip()
+
+    def walk_subsections(self) -> Iterator[dict]:
+        """Yield every section and subsection in the statute."""
+
+        def recurse(sections):
+            for section in sections:
+                yield section
+                yield from recurse(section.get("subsections", []))
+
+        yield from recurse(self.body)
+
+    def contains_references(self) -> bool:
+        """Ensure all or none of the sections include a 'references' field."""
+        seen = []
+        for sec in self.walk_subsections():
+            has_ref = "references" in sec
+            seen.append(has_ref)
+
+        if not seen:
+            return False  # no sections
+
+        if all(seen):
+            return True
+
+        if not any(seen):
+            return False
+
+        raise ValueError("Mixed reference presence — corrupt statute data")
+
+    def to_json(self) -> str:
+        """Serialize the statute to a JSON string."""
+        data = {
+            "schema_version": self.SCHEMA_VERSION,
+            "title": self.reference,
+            "name": self.name,
+            "body": self.body,
+            "history": self.history,
+        }
+        return json.dumps(data, indent=2)
+
+    def to_file(self, folder_path: Path):
+        """Write the statute to a JSON file in the given folder, using a generated name."""
+        folder_path.mkdir(parents=True, exist_ok=True)
+
+        title = self.reference.get("title", "unknown")
+        section = self.reference.get("section", "unknown")
+        version = self.reference.get("version")
+
+        filename_parts = [f"title_{title}", f"section_{section}"]
+        if version:
+            filename_parts.append(str(version))
+
+        filename = "_".join(filename_parts) + ".json"
+        path = folder_path / filename
+
+        path.write_text(self.to_json(), encoding="utf-8")
+
+    @staticmethod
+    def from_json(json_input: Union[str, dict, Path]) -> "Statute":
+        """Deserialize a Statute from JSON string, dict, or file path."""
+        if isinstance(json_input, Path):
+            json_str = json_input.read_text()
+            data = json.loads(json_str)
+        elif isinstance(json_input, str):
+            data = json.loads(json_input)
+        elif isinstance(json_input, dict):
+            data = json_input
+        else:
+            raise TypeError("Unsupported input type for from_json")
+
+        # Validate schema version
+        if data.get("schema_version") != Statute.SCHEMA_VERSION:
+            raise ValueError("Unsupported schema version")
+
+        return Statute(
+            reference=data["title"],
+            name=data["name"],
+            body=data["body"],
+            history=data["history"],
+        )
