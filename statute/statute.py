@@ -8,20 +8,18 @@ class Statute:
 
     SCHEMA_VERSION = 1  # In case you want versioning support
 
-    def __init__(self, reference: dict, name: str, body: list, history):
+    def __init__(self, reference: dict, name: str, body: dict, history):
         self.reference = reference  # {"title": title, "section": section, "version": version or None}
 
         self.name = name
         self.body = body
         # looks like this
-        # [{'label': '', 'text': 'Baz', 'subsections': [{'label': 'A', 'text': 'Foo', 'subsections': []}, {'label': 'B', 'text': 'Bar', 'subsections': []}]}]
+        # {'label': '', 'text': 'Baz', 'subsections': [{'label': 'A', 'text': 'Foo', 'subsections': []}, {'label': 'B', 'text': 'Bar', 'subsections': []}]}
         # if contains references, looks like
-        # [
         #   {'label': '', 'text': 'Baz', 'subsections': [
         #       {'label': 'A', 'text': 'Foo', 'subsections': [], 'references'=[]},
         #       {'label': 'B', 'text': 'Bar', 'subsections': [], 'references'=[]}
         #    ], 'references'=[]}
-        # ]
 
         self.history = history
 
@@ -40,37 +38,58 @@ class Statute:
 
         return collect_labels(self.body)
 
-    def get_text(self, subsection=None, indent=2):
-        def format_section(section, parent_labels=[], level=0):
-            label = section["label"] or None
-            current_labels = parent_labels + [label] if label else parent_labels
-            indent_space = " " * (level * indent)
+    def get_text(self, subsection: str | None = None, indent: int = 2) -> str:
+        """
+        Get formatted text for a statute, optionally restricted to a subsection label path like "A.2.b".
 
-            full_label = ".".join(filter(None, current_labels))
-            display_label = f"{label}. " if label else ""
+        Args:
+            subsection (str | None): Dot-separated label path, e.g., "A.2.b". If None, returns the full statute.
+            indent (int): Number of spaces per indentation level.
 
-            if (
-                subsection is None
-                or full_label == subsection
-                or (
-                    subsection
-                    and full_label
-                    and full_label.startswith(subsection + ".")
-                )
-            ):
-                lines = [f"{indent_space}{display_label}{section['text']}"]
-                for sub in section["subsections"]:
-                    lines.append(format_section(sub, current_labels, level + 1))
-                return "\n".join(lines)
-            return ""
+        Returns:
+            str: The formatted text of the statute or subsection.
+        """
 
-        output = []
-        for sec in self.body:
-            result = format_section(sec)
-            if result:
-                output.append(result)
+        def find_subsection(path: list[str], section: dict) -> dict | None:
+            """Recursively find a subsection by label path."""
+            # You would think recursive functions are fun like a puzzle
+            # They're more "fun like a SAW movie"
+            # print("Current path: ", path)
+            if not path:
+                # print("Path empty, returning", section)
+                return section
+            for child in section.get("subsections", []):
+                # print("Checking child: ", child, f"(child label={child['label']}) with the path[0]={path[0]}")
+                if child["label"] == path[0]:
+                    # print("Match found: recusing with child.")
+                    return find_subsection(path[1:], child)
+            return None
 
-        return "\n".join(output).strip()
+        def format_section(section: dict, level: int = 0) -> str:
+            """Recursively format a section and its children."""
+            lines = []
+            label = section["label"]
+            text_line = f"{' ' * (level * indent)}"
+            if label:
+                text_line += f"{label}. "
+            text_line += section["text"]
+            lines.append(text_line)
+
+            for child in section.get("subsections", []):
+                lines.append(format_section(child, level + 1))
+            return "\n".join(lines)
+
+        # Always starts from root (label: "")
+        root = self.body
+
+        if subsection:
+            path = subsection.split(".")
+            target = find_subsection(path, root)
+            if not target:
+                return f"[Missing subsection: {subsection}]"
+            return format_section(target).strip()
+        else:
+            return format_section(root).strip()
 
     def walk_subsections(self) -> Iterator[dict]:
         """Yield every section and subsection in the statute."""
@@ -78,7 +97,7 @@ class Statute:
         def recurse(sections):
             for section in sections:
                 yield section
-                yield from recurse(section.get("subsections", []))
+                yield from recurse(section.get("subsections", [])) # shamelessly stolen from SO
 
         yield from recurse(self.body)
 

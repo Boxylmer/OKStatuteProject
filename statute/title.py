@@ -24,7 +24,7 @@ class Title:
         return f"{ref['title'].lower()}|{ref['section'].lower()}|{version.lower()}"
 
     def get_reference_text(
-        self, section_reference: dict, subsection_reference: str = "", **kwargs
+        self, section_reference: dict, subsection_reference: Optional[str] = None, **kwargs
     ) -> Optional[str]:
         """
         Given a section reference and a subsection path (e.g., "A.1.b"),
@@ -34,7 +34,7 @@ class Title:
 
         statute = self.reference_registry.get(key)
         if not statute:
-            return None
+            raise (ValueError(f"Statute reference {section_reference} does not exist."))
 
         return statute.get_text(subsection=subsection_reference, **kwargs)
 
@@ -67,12 +67,12 @@ class Title:
         caching and custom exemptions for consistency checks.
 
         Args:
-            pdf_path (Path): 
+            pdf_path (Path):
                 The path to the statute PDF to parse (e.g., 'docs/statutes/2024-21.pdf').
-            pdf_cache_path (Path, optional): 
+            pdf_cache_path (Path, optional):
                 The directory used to cache parsed output from the PDF parser.
                 Defaults to 'data/pdf_cache'.
-            check_exemptions (list[str], optional): 
+            check_exemptions (list[str], optional):
                 A list of section references (as strings) that should be exempt from
                 consistency checking during body structuring. This should be the literal
                 staute section that shows up in the PDF.
@@ -103,7 +103,7 @@ class Title:
                 body, check_consistency=check_consistency
             )
             reference = StatuteReferenceStructurer().structure(unstructured_reference)
-            
+
             st = Statute(
                 reference=reference, name=name, body=structured_body, history=history
             )
@@ -116,4 +116,3 @@ class Title:
             # print()
 
         return Title(statutes)
-

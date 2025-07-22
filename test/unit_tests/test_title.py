@@ -5,8 +5,7 @@ import shutil
 import json
 
 from statute.title import Title
-from statute.statute import Statute 
-
+from statute.statute import Statute
 
 
 TITLE_21_PATH = Path("docs") / "statutes" / "2024-21.pdf"
@@ -14,6 +13,8 @@ TITLE_15_PATH = Path("docs") / "statutes" / "2024-15.pdf"
 
 
 class TestTitle(unittest.TestCase):
+    TITLE_21_CONSISTENCY_EXCEPTIONS = "§21-1168."
+
     def setUp(self):
         self.statute1 = Statute(
             reference={"title": "21", "section": "4", "version": None},
@@ -28,14 +29,19 @@ class TestTitle(unittest.TestCase):
                             "text": "Subsection A text",
                             "subsections": [],
                             "references": [
-                                {"title": "15", "section": "1A-C", "version": None, "subsection": ""}
+                                {
+                                    "title": "15",
+                                    "section": "1A-C",
+                                    "version": None,
+                                    "subsection": "",
+                                }
                             ],
                         }
                     ],
-                    "references": []
+                    "references": [],
                 }
             ],
-            history="R.L."
+            history="R.L.",
         )
 
         self.statute2 = Statute(
@@ -48,16 +54,16 @@ class TestTitle(unittest.TestCase):
                     "subsections": [],
                 }
             ],
-            history="R.L."
+            history="R.L.",
         )
 
         self.title = Title([self.statute1, self.statute2])
 
-
     def test_caching_and_loading(self):
-        TITLE_21_CONSISTENCY_EXCEPTIONS = "§21-1168."
-        title = Title.from_pdf(TITLE_21_PATH, check_exemptions=TITLE_21_CONSISTENCY_EXCEPTIONS)
-        
+        title = Title.from_pdf(
+            TITLE_21_PATH, check_exemptions=self.TITLE_21_CONSISTENCY_EXCEPTIONS
+        )
+
         with tempfile.TemporaryDirectory() as tempdir:
             cache_path = Path(tempdir)
 
@@ -71,6 +77,32 @@ class TestTitle(unittest.TestCase):
             # Should resolve the same text
             text = loaded_title.get_reference_text(
                 section_reference={"title": "21", "section": "2", "version": None},
-                subsection_reference=""
+                subsection_reference="",
             )
             self.assertIn("No act or omission shall ", text)
+
+    def test_reference_getter(self):
+        title = Title.from_pdf(
+            TITLE_21_PATH, check_exemptions=self.TITLE_21_CONSISTENCY_EXCEPTIONS
+        )
+
+        self.assertTrue(
+            title.get_reference_text({"title": "21", "section": "2200"}).startswith(
+                "A. There is hereby created the Oklahoma Organized Retail Crime Task Force"
+            )
+        )
+
+        self.assertTrue(
+            title.get_reference_text(section_reference={"title": "21", "section": "2200"}, subsection_reference="A")
+            .startswith(
+                "A. There is hereby created the Oklahoma Organized Retail Crime Task Force"
+            )
+        )
+        self.assertTrue(
+            title.get_reference_text(section_reference={"title": "21", "section": "2200"}, subsection_reference="B.2")
+            .startswith(
+                "2. Two members appointed by the President"
+            )
+        )
+
+        

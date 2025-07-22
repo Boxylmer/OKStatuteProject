@@ -33,7 +33,7 @@ class StatuteBodyStructurer:
 
     def structure(
         self, raw_body_text: str, check_consistency=True
-    ) -> List[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         cleaned_text = self._remove_soft_newlines(raw_body_text)
         lines = cleaned_text.strip().splitlines()
 
@@ -41,6 +41,7 @@ class StatuteBodyStructurer:
             self._process_line(line)
 
         # Modify structure with an unlabeled toplevel section and multiple labeled toplevel sections to be nested instead
+        # i.e., turn this structure {"", "A", "B", "C"} into {"", subsections={"A", "B", "C"}}
         if len(self._structure) > 1 and self._structure[0]["label"] == "":
             unlabeled_intro = self._structure[0]
             the_rest = self._structure[1:]
@@ -51,11 +52,16 @@ class StatuteBodyStructurer:
             if all_labeled:
                 unlabeled_intro["subsections"].extend(the_rest)
                 self._structure = [unlabeled_intro]
+        
+        # After restructuring, if the toplevel actually was labeled from the start ({"A", "B", "C"}), wrap it in an empty header -> {"", subsections={"A", "B", "C"}}
+        # this makes it way easier to write searches and stuff later on without adding a branch in every damn method. 
+        if all([s.get("label") for s in self._structure]):
+            self._structure = [{"label": "", "text": "", "subsections": self._structure}]
 
         if check_consistency:
             self._check_consistency(self._structure)
 
-        return self._structure
+        return self._structure[0]
 
     def _check_line_for_label(self, line: str) -> tuple[str, str, int] | None:
         """
