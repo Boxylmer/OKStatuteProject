@@ -1,5 +1,6 @@
 bs4
 chromadb # gotcha on win11 -> need Visual Studio C++ Build Tools 
+jsonschema
 langchain
 langchain-chroma
 langchain-community

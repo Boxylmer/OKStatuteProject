@@ -4,7 +4,7 @@ from nlp.ollama import OllamaChatStream
 
 THINK_TAG = "</think>"
 
-def extract_json(response_stream: OllamaChatStream, check_context_length: int | None = None) -> list | dict:
+def extract_json(response_stream: OllamaChatStream, check_context_length: int | None = None) -> list[list | dict]:
     """
     Extracts the first valid JSON object or array from an LLM response using bracket counting.
 
