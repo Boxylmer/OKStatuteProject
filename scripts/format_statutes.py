@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Union
 
 
-from nlp.statute_formatter import StatuteFormatter, StatutePostprocessor
+from deprecated.statute_formatter import StatuteFormatter, StatutePostprocessor
 
 
 def parse_statute_folder(

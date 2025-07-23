@@ -1,7 +1,7 @@
 import re
 import json
 from typing import List, Dict, Union
-from statute.statutecache import Statute
+from statute.statute import Statute
 from nlp.ollama import OllamaChatStream
 
 
