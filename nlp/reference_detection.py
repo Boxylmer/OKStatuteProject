@@ -61,8 +61,7 @@ class Referenceinator:
                     - Sometimes text might say something like "as defined in section X of this title", you will be given the current title and section of the snippit you're looking at.
                     - Often, a reference to another title might be phrased like "as defined in Section 701.7 of title 21". In this case, you would output a section reference and an empty string for the subsection reference.
                     - Quick example:  as provided for in subsection C of Section 6.1 of Title 17 of the Oklahoma Statutes -> {{section_reference: {{"title": "21", "": "section": "6.1", "version": ""}}, "subsection_reference": "C"}}
-            
-                    
+                                
             The following snippit is from title {self.statute.reference["title"]}, section {self.statute.reference["section"]}. Parse a list of references from it:
             {snippit}
             """
@@ -85,3 +84,13 @@ class Referenceinator:
 
             else:
                 subsection["references"] = []
+
+
+if __name__ == "__main__":
+    pass
+    # import a title
+    # get a statute
+    # pick llm model string
+    # instantiate referenceinator
+    # run
+    
