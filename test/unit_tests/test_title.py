@@ -10,7 +10,7 @@ from statute.statute import Statute
 
 TITLE_21_PATH = Path("docs") / "statutes" / "2024-21.pdf"
 TITLE_15_PATH = Path("docs") / "statutes" / "2024-15.pdf"
-
+TEST_DATA_DIR = Path("test") / "data"
 
 class TestTitle(unittest.TestCase):
     TITLE_21_CONSISTENCY_EXCEPTIONS = "§21-1168."
@@ -57,35 +57,37 @@ class TestTitle(unittest.TestCase):
             history="R.L.",
         )
 
-        self.title = Title()
+        self.title = Title(cache_dir=TEST_DATA_DIR)
         self.title._add_statute(self.statute1)
         self.title._add_statute(self.statute2)
 
     def test_caching_and_loading(self):
         # Make a temporary directory to do this in
+        title = Title(TEST_DATA_DIR)
+        temp_cache_dir = title.cache_dir
+        title.import_from_pdf(
+            TITLE_21_PATH, check_exemptions=self.TITLE_21_CONSISTENCY_EXCEPTIONS
+        )
 
-        with tempfile.TemporaryDirectory() as tempdir:
-            cache_path = Path(tempdir) / "cache"
-            title = Title(cache_path=cache_path)
-            title.import_from_pdf(TITLE_21_PATH, check_exemptions=self.TITLE_21_CONSISTENCY_EXCEPTIONS)
+        title.save_cache()
+        self.assertTrue(title.cache_dir.exists())
 
-            title.save_cache(cache_path / "cache")
-            self.assertTrue(cache_path.exists())
+        loaded_title = Title(temp_cache_dir)
 
-            loaded_title = Title.from_cache(cache_path / "cache")
+        self.assertEqual(len(loaded_title.statute_registry), len(title.statute_registry))
 
-            self.assertEqual(len(loaded_title.statutes), len(title.statutes))
 
-            # Should resolve the same text
-            text = loaded_title.get_reference_text(
-                section_reference={"title": "21", "section": "2", "version": None},
-                subsection_reference="",
-            )
-            self.assertIn("No act or omission shall ", text)
+        text = loaded_title.get_reference_text(
+            section_reference={"title": "21", "section": "2", "version": None},
+            subsection_reference="",
+        )
+        self.assertIn("No act or omission shall ", text)
 
     def test_reference_getter(self):
-        title = Title()
-        title.import_from_pdf(TITLE_21_PATH, check_exemptions=self.TITLE_21_CONSISTENCY_EXCEPTIONS)
+        title = Title(TEST_DATA_DIR)
+        title.import_from_pdf(
+            TITLE_21_PATH, check_exemptions=self.TITLE_21_CONSISTENCY_EXCEPTIONS
+        )
         # title = Title.from_pdf(
         #     TITLE_21_PATH, check_exemptions=self.TITLE_21_CONSISTENCY_EXCEPTIONS
         # )

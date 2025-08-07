@@ -7,38 +7,40 @@ from statute.statute import Statute
 from statute.structurers import StatuteBodyStructurer, StatuteReferenceStructurer
 
 
-
 # Need to load from a cache path on init, then add functions "load_from_pdf" that will add / update statutes.
 # It will need a flag overwrite=True, to either ignore existing statutes or overwrite them (since statutes could have post-load added reference data)
-# That way, loading from a cache is the default and loading in parsed statutes is the exception. If we load statutes from a pdf with overwrite=False (default), then we don't risk overwriting tediously found reference text. 
-#  
+# That way, loading from a cache is the default and loading in parsed statutes is the exception. If we load statutes from a pdf with overwrite=False (default), then we don't risk overwriting tediously found reference text.
+#
 
 
 class Title:
-    def __init__(self, cache_path: Path = None):
-        self.statute_registry: dict[str, Statute] = {}
-        self.cache_path = cache_path
+    CACHE_FILENAME = "statute_cache.json"
 
-        if cache_path:            
-            self._ensure_cache()
-            self._import_from_cache(cache_path=cache_path)
+    def __init__(self, cache_dir: Path):
+        self.statute_registry: dict[str, Statute] = {}
+        self.cache_dir = cache_dir
+
+        self.cache_dir = Path(cache_dir)
+
+        self.cache_statute_path = self.cache_dir / self.CACHE_FILENAME
+        self._ensure_cache()
+        self._import_from_cache()
 
     def _ensure_cache(self):
-        self.cache_path.touch()
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     def _add_statute(self, statute: Statute, overwrite: bool = False):
         key = self._make_registry_key(statute.reference)
-        
+
         if key in self.statute_registry:
             if overwrite:
-                self.statutes.remove(self.reference_registry[key])        
+                self.statutes.remove(self.reference_registry[key])
         else:
             self.statute_registry[key] = statute
 
-    def import_from_pdf(self, 
-        pdf_path: Path,
-        overwrite: bool = False,
-        check_exemptions: list[str] = []):
+    def import_from_pdf(
+        self, pdf_path: Path, overwrite: bool = False, check_exemptions: list[str] = []
+    ):
         """
         Import statutes from a PDF file into the Title object.
 
@@ -72,7 +74,7 @@ class Title:
 
         """
 
-        parser = StatuteParser(pdf_path=pdf_path)
+        parser = StatuteParser(pdf_path=pdf_path, cache_dir=self.cache_dir)
         res = parser.parse()
 
         statutes = []
@@ -91,7 +93,7 @@ class Title:
             )
             statutes.append(st)
 
-        for statute in statutes: 
+        for statute in statutes:
             self._add_statute(statute, overwrite=overwrite)
 
     def _make_registry_key(self, ref: dict) -> str:
@@ -119,7 +121,7 @@ class Title:
     def set_statute_references(
         self,
         statute_reference: dict,
-        ref_map: dict[str | None, list[dict]], # TODO
+        ref_map: dict[str | None, list[dict]],  # TODO
     ):
         """
         Set references for multiple subsections in a statute.
@@ -135,27 +137,27 @@ class Title:
 
         statute.set_references(ref_map)
 
-        # self.save_cache(#TODO should be callable from ) 
+        # self.save_cache(#TODO should be callable from )
 
     def save_cache(self):
         """Save the title (list of statutes) to a JSON cache file."""
-        if not self.cache_path:
-            raise ValueError("Cache path not set.")
-        
         data = {
-            "statutes": [s.to_json() for s in self.statutes],
+            "statutes": [s.to_json() for s in self.statute_registry.values()],
         }
-        self.cache_path.write_text(json.dumps(data, indent=2))
-   
-    def _import_from_cache(self, cache_path: Path, overwrite: bool=False):
-        raw = json.loads(cache_path.read_text())
-        
-        if not raw or not raw["statutes"]:
+        self.cache_statute_path.write_text(json.dumps(data, indent=2))
+
+    def _import_from_cache(self, overwrite: bool = False):
+        if (
+            not self.cache_statute_path.exists()
+            or self.cache_statute_path.stat().st_size == 0
+        ):
             return
-        
-        statutes = [Statute.from_json(json.loads(s)) for s in raw["statutes"]]
-    
+
+        raw = json.loads(self.cache_statute_path.read_text())
+
+        if not raw or "statutes" not in raw:
+            return
+
+        statutes = [Statute.from_json(s) for s in raw["statutes"]]
         for statute in statutes:
             self._add_statute(statute, overwrite=overwrite)
-
-

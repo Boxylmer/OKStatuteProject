@@ -4,7 +4,6 @@ from pathlib import Path
 import re
 from typing import List, Tuple
 
-
 import pymupdf4llm  # type: ignore
 
 from statute.utils import match_string_prefix_fuzzy
@@ -22,10 +21,12 @@ class StatuteParser:
         "R.L.",
     )
 
-    def __init__(self, pdf_path: Path, cache_dir: Path = Path("cache")):
+    def __init__(self, pdf_path: Path, cache_dir: Path):
         self.pdf_path = Path(pdf_path)
-        self.cache_dir = cache_dir
+        self.cache_dir = Path(cache_dir)
+        
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+
         self.md5_hash = self._compute_md5()
         self.raw_markdown_path = self.cache_dir / f"raw_{self.md5_hash}.md"
         self.cleaned_json_path = self.cache_dir / f"split_{self.md5_hash}.json"
