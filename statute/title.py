@@ -16,17 +16,24 @@ from statute.structurers import StatuteBodyStructurer, StatuteReferenceStructure
 
 class Title:
     def __init__(self, cache_path: Path):
+        self.statute_registry: dict[str, Statute] = {}
+
+        if cache_path.exists():
+            self._import_from_cache(cache_path)
+        else:
+            self._create_cache(cache_path)
+
+        self._import_from_cache(cache_path=cache_path)
+
+
+    def _add_statute(self, statute: Statute, overwrite: bool = False):
+        key = self._make_registry_key(statute.reference)
         
-        self.statutes = statutes
-
-        self.reference_registry: dict[str, Statute] = {}
-        for statute in statutes:
-            key = self._make_registry_key(statute.reference)
-
-            # if key in self.reference_registry:
-            #     raise ValueError(f"Duplicate statute reference: {key}")
-            
-            self.reference_registry[key] = statute
+        if key in self.statute_registry:
+            if overwrite:
+                self.statutes.remove(self.reference_registry[key])        
+        else:
+            self.statute_registry[key] = statute
 
     def import_from_pdf(self, 
         pdf_path: Path,
@@ -84,29 +91,30 @@ class Title:
             )
             statutes.append(st)
 
-        return Title(statutes)
+        for statute in statutes: 
+            self._add_statute(statute, overwrite=overwrite)
 
     def _make_registry_key(self, ref: dict) -> str:
         version = ref.get("version") or ""
         return f"{ref['title'].lower()}|{ref['section'].lower()}|{version.lower()}"
 
-    def get_reference_text(
-        self,
-        section_reference: dict,
-        subsection_reference: Optional[str] = None,
-        **kwargs,
-    ) -> Optional[str]:
-        """
-        Given a section reference and a subsection path (e.g., "A.1.b"),
-        return the referenced text or None if not found.
-        """
-        key = self._make_registry_key(section_reference)
+    # def get_reference_text(
+    #     self,
+    #     section_reference: dict,
+    #     subsection_reference: Optional[str] = None,
+    #     **kwargs,
+    # ) -> Optional[str]:
+    #     """
+    #     Given a section reference and a subsection path (e.g., "A.1.b"),
+    #     return the referenced text or None if not found.
+    #     """
+    #     key = self._make_registry_key(section_reference)
 
-        statute = self.reference_registry.get(key)
-        if not statute:
-            raise (ValueError(f"Statute reference {section_reference} does not exist."))
+    #     statute = self.reference_registry.get(key)
+    #     if not statute:
+    #         raise (ValueError(f"Statute reference {section_reference} does not exist."))
 
-        return statute.get_text(subsection=subsection_reference, **kwargs)
+    #     return statute.get_text(subsection=subsection_reference, **kwargs)
 
     def set_statute_references(
         self,
@@ -135,17 +143,16 @@ class Title:
             "statutes": [s.to_json() for s in self.statutes],
         }
         cache_path.write_text(json.dumps(data, indent=2))
-
-    @staticmethod
-    def from_cache(cache_path: Path) -> "Title":
-        """Load a title from a JSON cache file."""
+   
+    def _import_from_cache(self, cache_path: Path, overwrite: bool=False):
         raw = json.loads(cache_path.read_text())
-
-        statutes = [Statute.from_json(json.loads(s)) for s in raw["statutes"]]
-        return Title(statutes)
-
-    @staticmethod
-    def from_pdf(
         
-    ) -> "Title":
+        if not raw or not raw["statutes"]:
+            return
+        
+        statutes = [Statute.from_json(json.loads(s)) for s in raw["statutes"]]
+    
+        for statute in statutes:
+            self._add_statute(statute, overwrite=overwrite)
+
 
