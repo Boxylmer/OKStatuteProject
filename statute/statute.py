@@ -121,8 +121,6 @@ class Statute:
 
         raise ValueError("Mixed reference presence — corrupt statute data")
 
-    
-
     def to_json(self) -> str:
         """Serialize the statute to a JSON string."""
         data = {

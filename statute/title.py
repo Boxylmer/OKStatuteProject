@@ -15,16 +15,16 @@ from statute.structurers import StatuteBodyStructurer, StatuteReferenceStructure
 
 
 class Title:
-    def __init__(self, cache_path: Path):
+    def __init__(self, cache_path: Path = None):
         self.statute_registry: dict[str, Statute] = {}
+        self.cache_path = cache_path
 
-        if cache_path.exists():
-            self._import_from_cache(cache_path)
-        else:
-            self._create_cache(cache_path)
+        if cache_path:            
+            self._ensure_cache()
+            self._import_from_cache(cache_path=cache_path)
 
-        self._import_from_cache(cache_path=cache_path)
-
+    def _ensure_cache(self):
+        self.cache_path.touch()
 
     def _add_statute(self, statute: Statute, overwrite: bool = False):
         key = self._make_registry_key(statute.reference)
@@ -98,23 +98,23 @@ class Title:
         version = ref.get("version") or ""
         return f"{ref['title'].lower()}|{ref['section'].lower()}|{version.lower()}"
 
-    # def get_reference_text(
-    #     self,
-    #     section_reference: dict,
-    #     subsection_reference: Optional[str] = None,
-    #     **kwargs,
-    # ) -> Optional[str]:
-    #     """
-    #     Given a section reference and a subsection path (e.g., "A.1.b"),
-    #     return the referenced text or None if not found.
-    #     """
-    #     key = self._make_registry_key(section_reference)
+    def get_reference_text(
+        self,
+        section_reference: dict,
+        subsection_reference: Optional[str] = None,
+        **kwargs,
+    ) -> Optional[str]:
+        """
+        Given a section reference and a subsection path (e.g., "A.1.b"),
+        return the referenced text or None if not found.
+        """
+        key = self._make_registry_key(section_reference)
 
-    #     statute = self.reference_registry.get(key)
-    #     if not statute:
-    #         raise (ValueError(f"Statute reference {section_reference} does not exist."))
+        statute = self.statute_registry.get(key)
+        if not statute:
+            raise (ValueError(f"Statute reference {section_reference} does not exist."))
 
-    #     return statute.get_text(subsection=subsection_reference, **kwargs)
+        return statute.get_text(subsection=subsection_reference, **kwargs)
 
     def set_statute_references(
         self,
@@ -137,12 +137,15 @@ class Title:
 
         # self.save_cache(#TODO should be callable from ) 
 
-    def save_cache(self, cache_path: Path):
+    def save_cache(self):
         """Save the title (list of statutes) to a JSON cache file."""
+        if not self.cache_path:
+            raise ValueError("Cache path not set.")
+        
         data = {
             "statutes": [s.to_json() for s in self.statutes],
         }
-        cache_path.write_text(json.dumps(data, indent=2))
+        self.cache_path.write_text(json.dumps(data, indent=2))
    
     def _import_from_cache(self, cache_path: Path, overwrite: bool=False):
         raw = json.loads(cache_path.read_text())
