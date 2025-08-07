@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from typing import Iterator, Union
 
+from reference import StatuteReference
 
 class Statute:
     """Main class that holds statute information."""

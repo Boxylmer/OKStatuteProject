@@ -5,7 +5,7 @@ from typing import Optional
 from statute.statuteparser import StatuteParser
 from statute.statute import Statute
 from statute.structurers import StatuteBodyStructurer, StatuteReferenceStructurer
-
+# from statute.reference import StatuteReference
 
 # Need to load from a cache path on init, then add functions "load_from_pdf" that will add / update statutes.
 # It will need a flag overwrite=True, to either ignore existing statutes or overwrite them (since statutes could have post-load added reference data)
@@ -86,10 +86,10 @@ class Title:
             structured_body = StatuteBodyStructurer().structure(
                 body, check_consistency=check_consistency
             )
-            reference = StatuteReferenceStructurer().structure(unstructured_reference)
+            reference_data = StatuteReferenceStructurer().structure(unstructured_reference)
 
             st = Statute(
-                reference=reference, name=name, body=structured_body, history=history
+                reference=reference_data, name=name, body=structured_body, history=history
             )
             statutes.append(st)
 

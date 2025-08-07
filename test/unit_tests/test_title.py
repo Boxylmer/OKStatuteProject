@@ -88,9 +88,6 @@ class TestTitle(unittest.TestCase):
         title.import_from_pdf(
             TITLE_21_PATH, check_exemptions=self.TITLE_21_CONSISTENCY_EXCEPTIONS
         )
-        # title = Title.from_pdf(
-        #     TITLE_21_PATH, check_exemptions=self.TITLE_21_CONSISTENCY_EXCEPTIONS
-        # )
 
         self.assertTrue(
             title.get_reference_text({"title": "21", "section": "2200"}).startswith(
