@@ -97,7 +97,9 @@ class Statute:
         def recurse(sections):
             for section in sections:
                 yield section
-                yield from recurse(section.get("subsections", [])) # shamelessly stolen from SO
+                yield from recurse(
+                    section.get("subsections", [])
+                )  # shamelessly stolen from SO
 
         yield from recurse(self.body)
 
@@ -118,6 +120,8 @@ class Statute:
             return False
 
         raise ValueError("Mixed reference presence — corrupt statute data")
+
+    
 
     def to_json(self) -> str:
         """Serialize the statute to a JSON string."""

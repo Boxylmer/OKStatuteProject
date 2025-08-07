@@ -9,6 +9,7 @@ import pymupdf4llm  # type: ignore
 
 from statute.utils import match_string_prefix_fuzzy
 
+
 class StatuteParser:
     STATUTE_HEADER_RE = re.compile(r"^§[^\s]+-[^\s]+\.", re.MULTILINE)
     HISTORICAL_DATA_STARTERS = (
@@ -234,4 +235,3 @@ class StatuteParser:
                 clean_historical_data,
             )
         )
-
