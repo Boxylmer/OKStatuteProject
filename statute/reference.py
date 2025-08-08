@@ -1,14 +1,18 @@
-
-
 class StatuteReference:
-    def __init__(self, title: str, section: str, version: str | None = None, subsection: str | None = None):
+    def __init__(
+        self,
+        title: str,
+        section: str,
+        version: str | None = None,
+        subsection: str | None = None,
+    ):
         self.title = title
         self.section = section
         self.version = version
         self.subsection = subsection
 
     @property
-    def key(self) -> str:
+    def section_key(self) -> str:
         version = self.version or ""
         return f"{self.title.lower()}|{self.section.lower()}|{version.lower()}"
 
@@ -17,7 +21,7 @@ class StatuteReference:
             "title": self.title,
             "section": self.section,
             "version": self.version,
-            "subsection": self.subsection
+            "subsection": self.subsection,
         }
 
     @classmethod
@@ -26,5 +30,5 @@ class StatuteReference:
             title=data["title"],
             section=data["section"],
             version=data.get("version"),
-            subsection=data.get("subsection")
+            subsection=data.get("subsection"),
         )

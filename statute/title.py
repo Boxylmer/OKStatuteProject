@@ -30,7 +30,7 @@ class Title:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     def _add_statute(self, statute: Statute, overwrite: bool = False):
-        key = statute.reference.key
+        key = statute.reference.section_key
 
         if key in self.statute_registry:
             if overwrite:
@@ -86,13 +86,14 @@ class Title:
             structured_body = StatuteBodyStructurer().structure(
                 body, check_consistency=check_consistency
             )
-            reference_data = StatuteReferenceStructurer().structure(unstructured_reference)
-            reference = StatuteReference(
-                title=reference_data['title'],
-                section=reference_data['section'],
-                version=reference_data.get('version'),
+            reference_data = StatuteReferenceStructurer().structure(
+                unstructured_reference
             )
-
+            reference = StatuteReference(
+                title=reference_data["title"],
+                section=reference_data["section"],
+                version=reference_data.get("version"),
+            )
 
             st = Statute(
                 reference=reference, name=name, body=structured_body, history=history
@@ -111,7 +112,7 @@ class Title:
         Given a section reference and a subsection path (e.g., "A.1.b"),
         return the referenced text or None if not found.
         """
-        key = section_reference.key
+        key = section_reference.section_key
         subsection = section_reference.subsection
         statute = self.statute_registry.get(key)
         if not statute:

@@ -5,6 +5,7 @@ import textwrap
 from statute.structurers import StatuteBodyStructurer, StatuteReferenceStructurer
 from statute.utils import match_string_prefix_fuzzy
 from statute.statute import Statute
+from statute.reference import StatuteReference
 
 TEST_DATA_DIR = Path("test/test_data")
 TEST_BODY_TEXT = textwrap.dedent(
@@ -19,6 +20,27 @@ TEST_BODY_TEXT = textwrap.dedent(
         4. Removal from office; or
         5. Disqualification to hold and enjoy any office of honor,
     trust, or profit, under this state.
+    """
+)
+
+TEST_BODY_TEXT_HARD = textwrap.dedent(
+    """
+    A crime or public offense is an act or omission forbidden by
+    law, and to which is annexed, upon conviction, either of the
+    following punishments:
+        1. Death;
+        2. Imprisonment;
+        3. Fine;
+            a. If a second offence.
+
+        4. Removal from office; or
+        5. Disqualification to hold and enjoy any office of honor,
+    trust, or profit, under this state.
+
+    Additionally
+        1. Foo
+        2. Bar
+            a. Baz
     """
 )
 
@@ -95,7 +117,21 @@ class TestStatute(unittest.TestCase):
         statute = Statute(
             reference=reference, name="test statute", body=structured, history="foo"
         )
-    
+
         self.assertTrue(statute.get_text().startswith("A crime or public offense "))
         self.assertEqual(statute.get_text(subsection="2"), "2. Imprisonment;")
+
+    def test_directory(self):
+        structured = Statute(
+            reference=StatuteReference(title="21", section="54.1v2", version="1"),
+            name="test statute",
+            body=StatuteBodyStructurer().structure(raw_body_text=TEST_BODY_TEXT_HARD),
+            history="foo",
+        )
+
+        directory = structured.directory()
+        self.assertEqual(directory, ['1', '2', '3', '3.a', '4', '5', '1', '2', '2.a'])
+        
+        dir_texts = list(structured.get_text(d) for d in directory)
+        print(dir_texts)
 

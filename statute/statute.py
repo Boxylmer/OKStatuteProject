@@ -24,7 +24,7 @@ class Statute:
 
         self.history = history
 
-    def directory(self):
+    def directory(self) -> list[str]:
         def collect_labels(sections, prefix=""):
             labels = []
             for section in sections:
@@ -37,7 +37,8 @@ class Statute:
                     labels.extend(collect_labels(section["subsections"], full_label))
             return labels
 
-        return collect_labels(self.body)
+        return collect_labels(self.body["subsections"])
+
 
     def get_text(self, subsection: str | None = None, indent: int = 2) -> str:
         """
