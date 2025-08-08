@@ -5,7 +5,7 @@ from typing import Optional
 from statute.statuteparser import StatuteParser
 from statute.statute import Statute
 from statute.structurers import StatuteBodyStructurer, StatuteReferenceStructurer
-# from statute.reference import StatuteReference
+from statute.reference import StatuteReference
 
 # Need to load from a cache path on init, then add functions "load_from_pdf" that will add / update statutes.
 # It will need a flag overwrite=True, to either ignore existing statutes or overwrite them (since statutes could have post-load added reference data)
@@ -30,7 +30,7 @@ class Title:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     def _add_statute(self, statute: Statute, overwrite: bool = False):
-        key = self._make_registry_key(statute.reference)
+        key = statute.reference.key
 
         if key in self.statute_registry:
             if overwrite:
@@ -87,36 +87,37 @@ class Title:
                 body, check_consistency=check_consistency
             )
             reference_data = StatuteReferenceStructurer().structure(unstructured_reference)
+            reference = StatuteReference(
+                title=reference_data['title'],
+                section=reference_data['section'],
+                version=reference_data.get('version'),
+            )
+
 
             st = Statute(
-                reference=reference_data, name=name, body=structured_body, history=history
+                reference=reference, name=name, body=structured_body, history=history
             )
             statutes.append(st)
 
         for statute in statutes:
             self._add_statute(statute, overwrite=overwrite)
 
-    def _make_registry_key(self, ref: dict) -> str:
-        version = ref.get("version") or ""
-        return f"{ref['title'].lower()}|{ref['section'].lower()}|{version.lower()}"
-
     def get_reference_text(
         self,
-        section_reference: dict,
-        subsection_reference: Optional[str] = None,
+        section_reference: StatuteReference,
         **kwargs,
     ) -> Optional[str]:
         """
         Given a section reference and a subsection path (e.g., "A.1.b"),
         return the referenced text or None if not found.
         """
-        key = self._make_registry_key(section_reference)
-
+        key = section_reference.key
+        subsection = section_reference.subsection
         statute = self.statute_registry.get(key)
         if not statute:
             raise (ValueError(f"Statute reference {section_reference} does not exist."))
 
-        return statute.get_text(subsection=subsection_reference, **kwargs)
+        return statute.get_text(subsection=subsection, **kwargs)
 
     def set_statute_references(
         self,

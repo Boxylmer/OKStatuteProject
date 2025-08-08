@@ -2,15 +2,15 @@ import json
 from pathlib import Path
 from typing import Iterator, Union
 
-from reference import StatuteReference
+from statute.reference import StatuteReference
 
 class Statute:
     """Main class that holds statute information."""
 
     SCHEMA_VERSION = 1  # In case you want versioning support
 
-    def __init__(self, reference: dict, name: str, body: dict, history):
-        self.reference = reference  # {"title": title, "section": section, "version": version or None}
+    def __init__(self, reference: StatuteReference, name: str, body: dict, history):
+        self.reference = reference  # {"reference": title, "section": section, "version": version or None}
 
         self.name = name
         self.body = body
@@ -126,7 +126,7 @@ class Statute:
         """Serialize the statute to a JSON string."""
         data = {
             "schema_version": self.SCHEMA_VERSION,
-            "title": self.reference,
+            "reference": self.reference.to_dict(),
             "name": self.name,
             "body": self.body,
             "history": self.history,
@@ -137,9 +137,12 @@ class Statute:
         """Write the statute to a JSON file in the given folder, using a generated name."""
         folder_path.mkdir(parents=True, exist_ok=True)
 
-        title = self.reference.get("title", "unknown")
-        section = self.reference.get("section", "unknown")
-        version = self.reference.get("version")
+        # title = self.reference.get("title", "unknown")
+        title = self.reference.title
+        # section = self.reference.get("section", "unknown")
+        section = self.reference.section
+        # version = self.reference.get("version")
+        version = self.reference.version
 
         filename_parts = [f"title_{title}", f"section_{section}"]
         if version:
@@ -168,7 +171,7 @@ class Statute:
             raise ValueError("Unsupported schema version")
 
         return Statute(
-            reference=data["title"],
+            reference=StatuteReference.from_dict(data["reference"]),
             name=data["name"],
             body=data["body"],
             history=data["history"],

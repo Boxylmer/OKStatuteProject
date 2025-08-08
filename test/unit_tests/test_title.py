@@ -6,18 +6,19 @@ import json
 
 from statute.title import Title
 from statute.statute import Statute
-
+from statute.reference import StatuteReference
 
 TITLE_21_PATH = Path("docs") / "statutes" / "2024-21.pdf"
 TITLE_15_PATH = Path("docs") / "statutes" / "2024-15.pdf"
 TEST_DATA_DIR = Path("test") / "data"
+
 
 class TestTitle(unittest.TestCase):
     TITLE_21_CONSISTENCY_EXCEPTIONS = "§21-1168."
 
     def setUp(self):
         self.statute1 = Statute(
-            reference={"title": "21", "section": "4", "version": None},
+            reference=StatuteReference(title="21", section="4"),
             name="Unlawful Acts",
             body=[
                 {
@@ -45,7 +46,7 @@ class TestTitle(unittest.TestCase):
         )
 
         self.statute2 = Statute(
-            reference={"title": "15", "section": "1A-C", "version": None},
+            reference=StatuteReference(title="15", section="1A-C"),
             name="Consumer Rights",
             body=[
                 {
@@ -74,12 +75,12 @@ class TestTitle(unittest.TestCase):
 
         loaded_title = Title(temp_cache_dir)
 
-        self.assertEqual(len(loaded_title.statute_registry), len(title.statute_registry))
-
+        self.assertEqual(
+            len(loaded_title.statute_registry), len(title.statute_registry)
+        )
 
         text = loaded_title.get_reference_text(
-            section_reference={"title": "21", "section": "2", "version": None},
-            subsection_reference="",
+            section_reference=StatuteReference(title="21", section="2"),
         )
         self.assertIn("No act or omission shall ", text)
 
@@ -89,23 +90,24 @@ class TestTitle(unittest.TestCase):
             TITLE_21_PATH, check_exemptions=self.TITLE_21_CONSISTENCY_EXCEPTIONS
         )
 
+
         self.assertTrue(
-            title.get_reference_text({"title": "21", "section": "2200"}).startswith(
+            title.get_reference_text(StatuteReference(title="21", section="2200")).startswith(
                 "A. There is hereby created the Oklahoma Organized Retail Crime Task Force"
             )
         )
 
         self.assertTrue(
             title.get_reference_text(
-                section_reference={"title": "21", "section": "2200"},
-                subsection_reference="A",
+                section_reference=StatuteReference(title="21", section="2200", subsection='A')
             ).startswith(
                 "A. There is hereby created the Oklahoma Organized Retail Crime Task Force"
             )
         )
+
+        reference = StatuteReference(title="21", section="2200", subsection="B.2")
         self.assertTrue(
-            title.get_reference_text(
-                section_reference={"title": "21", "section": "2200"},
-                subsection_reference="B.2",
-            ).startswith("2. Two members appointed by the President")
+            title.get_reference_text(section_reference=reference).startswith(
+                "2. Two members appointed by the President"
+            )
         )

@@ -7,6 +7,7 @@ class StatuteReference:
         self.version = version
         self.subsection = subsection
 
+    @property
     def key(self) -> str:
         version = self.version or ""
         return f"{self.title.lower()}|{self.section.lower()}|{version.lower()}"
