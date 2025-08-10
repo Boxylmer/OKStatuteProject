@@ -133,5 +133,6 @@ class TestStatute(unittest.TestCase):
         self.assertEqual(directory, ['1', '2', '3', '3.a', '4', '5', '1', '2', '2.a'])
         
         dir_texts = list(structured.get_text(d) for d in directory)
+        print(structured.body)
         print(dir_texts)
 

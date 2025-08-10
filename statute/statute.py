@@ -81,7 +81,6 @@ class Statute:
                 lines.append(format_section(child, level + 1))
             return "\n".join(lines)
 
-        # Always starts from root (label: "")
         root = self.body
 
         if subsection:
