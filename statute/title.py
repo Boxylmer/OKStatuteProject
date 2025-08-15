@@ -141,6 +141,16 @@ class Title:
 
         # self.save_cache(#TODO should be callable from )
 
+    def ensure_statutes_are_referenced(self, n=1) -> bool:
+        """
+        Iterate through the statutes, using an LLM to add references where they are missing for up to `n` unreferenced statutes.
+        Returns `true` if all statutes are references, `false` if there remain unreferences statutes.
+        """
+        # for all statutes in statutes
+        # TODO 
+        pass
+
+
     def save_cache(self):
         """Save the title (list of statutes) to a JSON cache file."""
         data = {
