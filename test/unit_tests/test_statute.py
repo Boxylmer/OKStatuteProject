@@ -38,8 +38,8 @@ TEST_BODY_TEXT_HARD = textwrap.dedent(
     trust, or profit, under this state.
 
     Additionally
-        1. Foo
-        2. Bar
+        6. Foo
+        7. Bar
             a. Baz
     """
 )
@@ -130,9 +130,15 @@ class TestStatute(unittest.TestCase):
         )
 
         directory = structured.directory()
-        self.assertEqual(directory, ['1', '2', '3', '3.a', '4', '5', '1', '2', '2.a'])
+        self.assertEqual(directory, ['1', '2', '3', '3.a', '4', '5', '6', '7', '7.a'])
         
         dir_texts = list(structured.get_text(d) for d in directory)
-        print(structured.body)
-        print(dir_texts)
+        # print(structured.body)
+        # print(dir_texts)
 
+        self.assertEqual(structured.get_text("7.a", headers="normal"), "a. Baz")
+        self.assertEqual(structured.get_text("7.a", headers="none"), "Baz")
+        self.assertEqual(structured.get_text("7.a", headers="verbose"), "7.a. Baz")
+
+
+        # print(f"'{structured.get_text("7.a", headers="verbose")}'")
